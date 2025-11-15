@@ -146,7 +146,7 @@ const getRecordsForEmployeeCourse = (employeeId: string, courseId: string, recor
 
 const getLatestRecord = (employeeId: string, courseId: string, records: CompletionRecord[]) => {
   const entries = getRecordsForEmployeeCourse(employeeId, courseId, records);
-    return records.length > 0 ? records[0] : null;
+    return entries.length > 0 ? entries[0] : null;
   };
 
   const handleViewPDF = async (record: CompletionRecord) => {

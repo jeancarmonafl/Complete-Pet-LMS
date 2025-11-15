@@ -8,9 +8,10 @@ const router = Router();
 router.use(authenticate());
 router.get('/', listUsersHandler);
 router.post('/', createUserHandler);
+// Static routes must come before dynamic routes
+router.get('/supervisors', listSupervisorsHandler);
 router.get('/:id/activity', getUserActivityHandler);
 router.put('/:id', updateUserHandler);
-router.get('/supervisors', listSupervisorsHandler);
 router.patch('/:id/status', updateUserStatusHandler);
 
 export default router;
