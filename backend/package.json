@@ -7,7 +7,8 @@
     "build": "npm rebuild bcrypt --build-from-source && tsc",
     "start": "node dist/index.js",
     "lint": "eslint . --ext .ts",
-    "migrate": "node scripts/migrate.js"
+    "migrate": "node scripts/migrate.js",
+    "seed": "node scripts/seed-dev-data.js"
   },
   "dependencies": {
     "@types/bcrypt": "5.0.2",
