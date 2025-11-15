@@ -27,7 +27,8 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401) {
+    // Only redirect on 401 for authenticated endpoints, not for login attempts
+    if (error.response?.status === 401 && !error.config?.url?.includes('/auth/login')) {
       // Unauthorized - clear token and redirect to login
       localStorage.removeItem('cp-token');
       localStorage.removeItem('cp-user');
