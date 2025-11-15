@@ -116,7 +116,7 @@ export default function TrainingMatrixPage() {
     };
     const getLatestRecord = (employeeId, courseId, records) => {
         const entries = getRecordsForEmployeeCourse(employeeId, courseId, records);
-        return records.length > 0 ? records[0] : null;
+        return entries.length > 0 ? entries[0] : null;
     };
     const handleViewPDF = async (record) => {
         const employee = employees.find(e => e.employeeId === record.employeeId);

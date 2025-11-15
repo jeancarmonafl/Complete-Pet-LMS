@@ -3,7 +3,6 @@
 export async function generateCVS_ADM_005_PDF(record) {
     // Dynamically import html2pdf only when needed
     const html2pdf = (await import('html2pdf.js')).default;
-    
     const documentHTML = `
     <!DOCTYPE html>
     <html>

@@ -1,5 +1,5 @@
 import bcrypt from 'bcrypt';
-import { webcrypto } from 'crypto';
+import { webcrypto } from 'node:crypto';
 
 import env from '../config/env.js';
 
@@ -25,6 +25,6 @@ export function generateTemporaryPassword(length = 12): string {
   const charset = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%^&*';
   const values = crypto.getRandomValues(new Uint32Array(length));
   return Array.from(values)
-    .map((value) => charset[value % charset.length])
+    .map((value: number) => charset[value % charset.length])
     .join('');
 }
