@@ -1,0 +1,36 @@
+import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
+import { EnvelopeIcon, LockClosedIcon } from '@heroicons/react/24/outline';
+import { useMutation } from '@tanstack/react-query';
+import { useForm } from 'react-hook-form';
+import { useNavigate, useParams } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
+import { Logo } from '../components/Logo';
+import { useAuthStore } from '../contexts/useAuthStore';
+import api from '../services/apiClient';
+export default function LoginPage() {
+    const { location } = useParams();
+    const navigate = useNavigate();
+    const setSession = useAuthStore((state) => state.setSession);
+    const { register, handleSubmit } = useForm();
+    const { t } = useTranslation();
+    const locationCode = (location || '').toUpperCase();
+    const locationName = locationCode === 'FL'
+        ? t('florida')
+        : locationCode === 'VT'
+            ? t('vermont')
+            : 'Complete-Pet';
+    const mutation = useMutation({
+        mutationFn: async (data) => {
+            const response = await api.post('/auth/login', {
+                ...data,
+                locationCode
+            });
+            return response.data;
+        },
+        onSuccess: (data) => {
+            setSession(data.token, data.user);
+            navigate('/app/dashboard');
+        }
+    });
+    return (_jsxs("div", { className: "w-full max-w-md rounded-3xl bg-white p-12 shadow-card dark:bg-slate-900", children: [_jsxs("div", { className: "flex flex-col items-center text-center", children: [_jsx(Logo, { size: "xl" }), _jsx("h1", { className: "mt-6 text-3xl font-bold text-slate-900 dark:text-white", children: t('loginTitle', { location: locationName }) }), _jsx("p", { className: "mt-2 text-sm font-medium text-slate-600 dark:text-slate-400", children: t('signInToContinue') })] }), _jsxs("form", { onSubmit: handleSubmit((data) => mutation.mutate(data)), className: "mt-8 space-y-6", children: [_jsxs("div", { children: [_jsx("label", { className: "mb-2 block text-sm font-semibold text-slate-700 dark:text-slate-200", children: t('email') }), _jsxs("div", { className: "flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 dark:border-slate-700 dark:bg-slate-800", children: [_jsx(EnvelopeIcon, { className: "h-5 w-5 text-slate-400" }), _jsx("input", { type: "text", ...register('identifier'), required: true, className: "w-full bg-transparent text-sm text-slate-900 outline-none placeholder:text-slate-400 dark:text-slate-100", placeholder: t('loginPlaceholder') })] })] }), _jsxs("div", { children: [_jsx("label", { className: "mb-2 block text-sm font-semibold text-slate-700 dark:text-slate-200", children: t('password') }), _jsxs("div", { className: "flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 dark:border-slate-700 dark:bg-slate-800", children: [_jsx(LockClosedIcon, { className: "h-5 w-5 text-slate-400" }), _jsx("input", { type: "password", ...register('password'), required: true, className: "w-full bg-transparent text-sm text-slate-900 outline-none placeholder:text-slate-400 dark:text-slate-100", placeholder: "\u00B7\u00B7\u00B7\u00B7\u00B7\u00B7\u00B7\u00B7" })] })] }), _jsx("button", { type: "submit", disabled: mutation.isPending, className: "flex w-full items-center justify-center rounded-xl bg-slate-900 px-4 py-3.5 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800 disabled:opacity-50 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-200", children: mutation.isPending ? t('loading') : t('signIn') }), mutation.isError && (_jsx("p", { className: "text-center text-sm text-red-500", children: t('invalidCredentials') }))] })] }));
+}
