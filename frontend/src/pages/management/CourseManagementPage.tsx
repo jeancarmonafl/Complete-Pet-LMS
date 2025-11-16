@@ -34,6 +34,46 @@ interface CourseForm {
   isActive?: boolean;
 }
 
+const createEmptyQuiz = (): QuizQuestion[] =>
+  Array.from({ length: 4 }, () => ({
+    question: '',
+    answers: ['', '', '', ''],
+    correctAnswerIndex: 0
+  }));
+
+const parseQuestionsPayload = (payload: unknown): QuizQuestion[] => {
+  let normalized = payload;
+
+  if (typeof normalized === 'string') {
+    try {
+      normalized = JSON.parse(normalized);
+    } catch {
+      return createEmptyQuiz();
+    }
+  }
+
+  if (!Array.isArray(normalized)) {
+    return createEmptyQuiz();
+  }
+
+  const parsed = (normalized as any[]).map((item) => {
+    const answersSource = Array.isArray(item?.answers) ? item.answers : [];
+    const answers = [0, 1, 2, 3].map((index) =>
+      typeof answersSource[index] === 'string' ? answersSource[index] : ''
+    );
+    const rawIndex = typeof item?.correctAnswerIndex === 'number' ? item.correctAnswerIndex : 0;
+    const sanitizedIndex = rawIndex >= 0 && rawIndex < answers.length ? rawIndex : 0;
+
+    return {
+      question: typeof item?.question === 'string' ? item.question : '',
+      answers,
+      correctAnswerIndex: sanitizedIndex
+    };
+  });
+
+  return parsed.length > 0 ? parsed : createEmptyQuiz();
+};
+
 export default function CourseManagementPage() {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
@@ -61,12 +101,7 @@ export default function CourseManagementPage() {
       positionScope: 'all',
       selectedPositions: [],
       exceptionPositions: [],
-      questions: [
-        { question: '', answers: ['', '', '', ''], correctAnswerIndex: 0 },
-        { question: '', answers: ['', '', '', ''], correctAnswerIndex: 0 },
-        { question: '', answers: ['', '', '', ''], correctAnswerIndex: 0 },
-        { question: '', answers: ['', '', '', ''], correctAnswerIndex: 0 }
-      ]
+      questions: createEmptyQuiz()
     }
   });
 
@@ -141,12 +176,27 @@ export default function CourseManagementPage() {
       const response = await api.patch(`/courses/${id}/status`, { isActive });
       return response.data;
     },
-    onSuccess: () => {
+    onMutate: async (variables) => {
+      await queryClient.cancelQueries({ queryKey: ['courses'] });
+      const previousCourses = queryClient.getQueryData<any[]>(['courses']);
+
+      queryClient.setQueryData(['courses'], (old: any[] = []) =>
+        old.map((course) =>
+          course.id === variables.id ? { ...course, is_active: variables.isActive } : course
+        )
+      );
+
+      return { previousCourses };
+    },
+    onError: (error: any, _variables, context) => {
+      if (context?.previousCourses) {
+        queryClient.setQueryData(['courses'], context.previousCourses);
+      }
+      alert(`Error updating course status: ${error.response?.data?.message || error.message}`);
+    },
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ['courses'] });
       setOpenDropdownId(null);
-    },
-    onError: (error: any) => {
-      alert(`Error updating course status: ${error.response?.data?.message || error.message}`);
     }
   });
 
@@ -206,32 +256,28 @@ export default function CourseManagementPage() {
   }, []);
 
   const handleEdit = (course: any) => {
+    const parsedQuestions = parseQuestionsPayload(course.questions);
+
+    reset({
+      title: course.title || '',
+      description: course.description || '',
+      contentType: course.content_type || 'video',
+      durationMinutes: course.duration_minutes ?? 0,
+      passPercentage: course.pass_percentage ?? 80,
+      isMandatory: course.is_mandatory ?? false,
+      isPublished: course.is_published ?? false,
+      departmentScope: course.assigned_departments?.length ? 'specific' : 'all',
+      selectedDepartments: course.assigned_departments || [],
+      positionScope: course.assigned_positions?.length ? 'specific' : 'all',
+      selectedPositions: course.assigned_positions || [],
+      exceptionPositions: course.exception_positions || [],
+      questions: parsedQuestions,
+      isActive: course.is_active ?? true
+    });
+
     setEditingCourse(course);
-    setActiveTab('details'); // Reset to details tab when opening edit
-    setValue('title', course.title);
-    setValue('description', course.description || '');
-    setValue('contentType', course.content_type);
-    setValue('durationMinutes', course.duration_minutes || 0);
-    setValue('passPercentage', course.pass_percentage || 80);
-    setValue('isMandatory', course.is_mandatory || false);
-    setValue('isPublished', course.is_published || false);
-    setValue('departmentScope', course.assigned_departments?.length > 0 ? 'specific' : 'all');
-    setValue('selectedDepartments', course.assigned_departments || []);
-    setValue('positionScope', course.assigned_positions?.length > 0 ? 'specific' : 'all');
-    setValue('selectedPositions', course.assigned_positions || []);
-    setValue('exceptionPositions', course.exception_positions || []);
-    setValue('isActive', course.is_active ?? true);
-    // Set quiz questions if available, otherwise use default structure
-    if (course.questions && Array.isArray(course.questions) && course.questions.length > 0) {
-      setValue('questions', course.questions);
-    } else {
-      setValue('questions', [
-        { question: '', answers: ['', '', '', ''], correctAnswerIndex: 0 },
-        { question: '', answers: ['', '', '', ''], correctAnswerIndex: 0 },
-        { question: '', answers: ['', '', '', ''], correctAnswerIndex: 0 },
-        { question: '', answers: ['', '', '', ''], correctAnswerIndex: 0 }
-      ]);
-    }
+    setActiveTab('details');
+    setFileName('');
     setOpenDropdownId(null);
     setEditOpen(true);
   };
@@ -246,8 +292,11 @@ export default function CourseManagementPage() {
   const handleDeleteConfirm = () => {
     if (!deletingCourse) return;
     
-    if (deleteConfirmId !== deletingCourse.id) {
-      alert('Course ID does not match. Please type the correct course ID.');
+    const trimmedId = deleteConfirmId.trim();
+    const shortId = deletingCourse.id.substring(0, 8);
+
+    if (trimmedId !== deletingCourse.id && trimmedId !== shortId) {
+      alert(`Course ID does not match. Please type ${shortId} or the full ID to confirm.`);
       return;
     }
 
@@ -279,8 +328,7 @@ export default function CourseManagementPage() {
         positionScope: data.positionScope,
         selectedPositions: data.selectedPositions,
         exceptionPositions: data.exceptionPositions,
-        questions: data.questions,
-        isActive: data.isActive
+        questions: data.questions
       }
     });
   };
@@ -311,7 +359,7 @@ export default function CourseManagementPage() {
     }
   });
 
-  const questions = watch('questions') || [];
+  const questions = watch('questions') || createEmptyQuiz();
 
   return (
     <div className="space-y-10">
@@ -346,7 +394,7 @@ export default function CourseManagementPage() {
           </span>
         </div>
 
-        <div className="mt-6 overflow-hidden rounded-2xl border border-slate-100 dark:border-slate-800">
+        <div className="mt-6 overflow-x-auto rounded-2xl border border-slate-100 dark:border-slate-800">
           <table className="min-w-full divide-y divide-slate-100 dark:divide-slate-800">
             <thead className="bg-slate-50 dark:bg-slate-800/60">
               <tr>
@@ -444,7 +492,7 @@ export default function CourseManagementPage() {
                           <EllipsisVerticalIcon className="h-5 w-5" />
                         </button>
                         {openDropdownId === course.id && (
-                          <div className="absolute right-0 bottom-full mb-2 z-50 w-56 rounded-lg border border-slate-200 bg-white shadow-lg dark:border-slate-700 dark:bg-slate-800">
+                          <div className="absolute right-0 z-50 mt-2 w-56 rounded-lg border border-slate-200 bg-white shadow-lg dark:border-slate-700 dark:bg-slate-800">
                             <div className="py-1">
                               <button
                                 onClick={() => handleEdit(course)}
@@ -742,10 +790,10 @@ export default function CourseManagementPage() {
 
               <div>
                 <h3 className="text-sm font-semibold text-slate-900 dark:text-white">
-                  {t('assignmentExceptions')}
+                  {t('assignmentExceptions') || 'Exceptions'}
                 </h3>
                 <p className="mt-1 text-xs text-slate-600 dark:text-slate-400">
-                  {t('assignmentExceptionsDesc')}
+                  {t('assignmentExceptionsDesc') || 'Select who is exempted from taking this training.'}
                 </p>
                 <div className="mt-4 space-y-2 rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800">
                   {positions.map((pos) => (
@@ -1094,10 +1142,10 @@ export default function CourseManagementPage() {
 
               <div>
                 <h3 className="text-sm font-semibold text-slate-900 dark:text-white">
-                  {t('assignmentExceptions')}
+                  {t('assignmentExceptions') || 'Exceptions'}
                 </h3>
                 <p className="mt-1 text-xs text-slate-600 dark:text-slate-400">
-                  {t('assignmentExceptionsDesc')}
+                  {t('assignmentExceptionsDesc') || 'Select who is exempted from taking this training.'}
                 </p>
                 <div className="mt-4 space-y-2 rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800">
                   {positions.map((pos) => (
@@ -1208,15 +1256,20 @@ export default function CourseManagementPage() {
           
           <div>
             <label className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-200">
-              {t('typeCourseId') || 'Type the course ID to confirm:'}
+              {t('typeCourseId') || 'Type the course ID (or first 8 characters) to confirm:'}
             </label>
             <input
               type="text"
               value={deleteConfirmId}
               onChange={(e) => setDeleteConfirmId(e.target.value)}
               className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none focus:border-red-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
-              placeholder={deletingCourse?.id || 'Course ID'}
+              placeholder={deletingCourse ? deletingCourse.id.substring(0, 8) : 'Course ID'}
             />
+            {deletingCourse && (
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                Hint: {deletingCourse.id} ({deletingCourse.id.substring(0, 8)})
+              </p>
+            )}
           </div>
 
           <div className="flex items-center justify-end gap-3 border-t border-slate-200 pt-4 dark:border-slate-700">

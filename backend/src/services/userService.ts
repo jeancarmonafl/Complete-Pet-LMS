@@ -189,6 +189,20 @@ export async function updateUserStatus(userId: string, locationId: string, isAct
   );
 }
 
+export async function resetPassword(userId: string, locationId: string, newPassword: string): Promise<QueryResult> {
+  const passwordHash = await hashPassword(newPassword);
+  
+  return pool.query(
+    `
+      UPDATE users
+      SET password_hash = $1, updated_at = CURRENT_TIMESTAMP
+      WHERE id = $2 AND location_id = $3
+      RETURNING id
+    `,
+    [passwordHash, userId, locationId]
+  );
+}
+
 export async function getUserActivity(userId: string, locationId: string) {
   const client = await pool.connect();
 

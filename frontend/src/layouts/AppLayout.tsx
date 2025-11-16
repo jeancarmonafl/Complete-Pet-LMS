@@ -23,8 +23,8 @@ export function AppLayout({ children }: PropsWithChildren) {
   ];
 
   return (
-    <div className="flex min-h-screen bg-slate-50 dark:bg-slate-950">
-      <aside className="fixed left-0 top-0 hidden h-screen w-64 shrink-0 border-r border-slate-100 bg-white/80 px-4 py-6 shadow-sm backdrop-blur dark:border-slate-800 dark:bg-slate-900 lg:flex lg:flex-col">
+    <div className="flex min-h-screen bg-slate-50 dark:bg-slate-950 lg:h-screen">
+      <aside className="hidden border-r border-slate-100 bg-white/80 px-4 py-6 shadow-sm backdrop-blur dark:border-slate-800 dark:bg-slate-900 lg:fixed lg:inset-y-0 lg:flex lg:w-64 lg:flex-col lg:overflow-y-auto">
         <div className="flex items-center gap-3 px-2">
           <Logo size="md" className="shrink-0" />
           <div>
@@ -32,7 +32,7 @@ export function AppLayout({ children }: PropsWithChildren) {
             <p className="text-xs text-slate-500 dark:text-slate-400 uppercase">{formatRole(user?.role)}</p>
           </div>
         </div>
-        <nav className="mt-8 space-y-1 overflow-y-auto flex-1">
+        <nav className="mt-8 space-y-1">
           {navigation.map((item) => (
             <NavLink
               key={item.name}
@@ -66,8 +66,15 @@ export function AppLayout({ children }: PropsWithChildren) {
           </button>
         </div>
       </aside>
-      <div className="flex flex-1 flex-col lg:ml-64">
-        <main className="flex-1 bg-slate-50/60 px-4 py-8 dark:bg-slate-950/60 lg:px-10">{children}</main>
+      <div className="flex w-full flex-col lg:ml-64 lg:h-screen lg:overflow-hidden">
+        <div className="sticky top-0 z-30 border-b border-slate-200 bg-white/80 px-4 py-4 backdrop-blur dark:border-slate-800 dark:bg-slate-950/80 lg:hidden">
+          <div className="flex justify-end">
+            <TopbarControls />
+          </div>
+        </div>
+        <main className="flex-1 bg-slate-50/60 px-4 py-8 dark:bg-slate-950/60 lg:h-full lg:overflow-y-auto lg:px-10">
+          {children}
+        </main>
       </div>
     </div>
   );

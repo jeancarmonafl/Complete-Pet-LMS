@@ -1,6 +1,6 @@
 import { Router } from 'express';
 
-import { createUserHandler, getUserActivityHandler, listSupervisorsHandler, listUsersHandler, updateUserHandler, updateUserStatusHandler } from '../controllers/userController.js';
+import { createUserHandler, getUserActivityHandler, listSupervisorsHandler, listUsersHandler, resetPasswordHandler, updateUserHandler, updateUserStatusHandler } from '../controllers/userController.js';
 import { authenticate } from '../middleware/auth.js';
 
 const router = Router();
@@ -13,5 +13,6 @@ router.get('/supervisors', listSupervisorsHandler);
 router.get('/:id/activity', getUserActivityHandler);
 router.put('/:id', updateUserHandler);
 router.patch('/:id/status', updateUserStatusHandler);
+router.post('/:id/reset-password', resetPasswordHandler);
 
 export default router;

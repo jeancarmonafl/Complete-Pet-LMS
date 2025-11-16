@@ -38,6 +38,14 @@ interface TrainingCompletionRecord {
 export async function generateCVS_ADM_005_PDF(record: TrainingCompletionRecord): Promise<void> {
   // Dynamically import html2pdf only when needed
   const html2pdf = (await import('html2pdf.js')).default;
+
+  const employeeSignatureMarkup = record.employeeSignature?.startsWith('data:image')
+    ? `<img src="${record.employeeSignature}" alt="Employee signature" />`
+    : record.employeeSignature || 'Signature on file';
+
+  const supervisorSignatureMarkup = record.supervisorSignature?.startsWith('data:image')
+    ? `<img src="${record.supervisorSignature}" alt="Supervisor signature" />`
+    : record.supervisorSignature || 'Signature on file';
   
   const documentHTML = `
     <!DOCTYPE html>
@@ -136,6 +144,12 @@ export async function generateCVS_ADM_005_PDF(record: TrainingCompletionRecord):
           font-family: 'Brush Script MT', cursive, Arial;
           font-size: 18pt;
           padding-top: 10px;
+        }
+
+        .signature-line img {
+          max-height: 60px;
+          width: auto;
+          display: block;
         }
         
         .signature-label {
@@ -313,7 +327,7 @@ export async function generateCVS_ADM_005_PDF(record: TrainingCompletionRecord):
             I acknowledge that I have completed the training as described above and understand 
             the material covered. I agree to comply with all procedures outlined in this training.
           </p>
-          <div class="signature-line">${record.employeeSignature}</div>
+          <div class="signature-line">${employeeSignatureMarkup}</div>
           <div class="signature-label">Employee Signature (Electronic)</div>
           <div class="timestamp">
             Signed on: ${formatDateTime(record.employeeSignatureDate)}<br>
@@ -328,7 +342,7 @@ export async function generateCVS_ADM_005_PDF(record: TrainingCompletionRecord):
             I verify that the employee named above has successfully completed this training 
             and demonstrated understanding of the material. This training record is approved.
           </p>
-          <div class="signature-line">${record.supervisorSignature}</div>
+          <div class="signature-line">${supervisorSignatureMarkup}</div>
           <div class="signature-label">Supervisor/Administrator Signature (Electronic)</div>
           <div class="timestamp">
             Signed on: ${formatDateTime(record.supervisorSignatureDate)}<br>

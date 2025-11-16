@@ -86,7 +86,19 @@ export function SupervisorApprovalModal({ open, record, onClose, onApprove }: Su
             </div>
             <div className="rounded-2xl border border-slate-200 p-4 text-sm dark:border-slate-700">
               <p className="text-slate-500 dark:text-slate-400">Employee signature</p>
-              <p className="text-lg font-semibold text-slate-900 dark:text-white">{record.employeeSignature}</p>
+              {record.employeeSignature?.startsWith('data:image') ? (
+                <div className="mt-2 rounded-xl border border-slate-200 bg-white p-2 dark:border-slate-700 dark:bg-slate-900">
+                  <img
+                    src={record.employeeSignature}
+                    alt="Employee signature"
+                    className="mx-auto h-16 w-full object-contain"
+                  />
+                </div>
+              ) : (
+                <p className="text-lg font-semibold text-slate-900 dark:text-white">
+                  {record.employeeSignature || 'Signature on file'}
+                </p>
+              )}
             </div>
           </div>
         </div>

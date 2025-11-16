@@ -2,7 +2,7 @@ import { Response } from 'express';
 import { z } from 'zod';
 
 import { AuthenticatedRequest } from '../middleware/auth.js';
-import { createUser, getUserActivity, listSupervisors, listUsers, updateUser, updateUserStatus } from '../services/userService.js';
+import { createUser, getUserActivity, listSupervisors, listUsers, resetPassword, updateUser, updateUserStatus } from '../services/userService.js';
 
 const createUserSchema = z.object({
   fullName: z.string().min(1),
@@ -16,6 +16,10 @@ const createUserSchema = z.object({
 
 const userStatusSchema = z.object({
   isActive: z.boolean()
+});
+
+const resetPasswordSchema = z.object({
+  newPassword: z.string().min(8)
 });
 
 export async function createUserHandler(req: AuthenticatedRequest, res: Response) {
@@ -154,5 +158,34 @@ export async function getUserActivityHandler(req: AuthenticatedRequest, res: Res
     return res.json(activity);
   } catch (error) {
     return res.status(500).json({ message: 'Unable to fetch user activity' });
+  }
+}
+
+export async function resetPasswordHandler(req: AuthenticatedRequest, res: Response) {
+  if (!req.user) {
+    return res.status(401).json({ message: 'Unauthorized' });
+  }
+
+  try {
+    const userId = req.params.id;
+    const body = resetPasswordSchema.parse(req.body);
+
+    if (!['global_admin', 'admin'].includes(req.user.role)) {
+      return res.status(403).json({ message: 'Forbidden' });
+    }
+
+    const result = await resetPassword(userId, req.user.locationId, body.newPassword);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    return res.json({ message: 'Password reset successfully' });
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return res.status(422).json({ message: 'Invalid payload', issues: error.issues });
+    }
+
+    return res.status(500).json({ message: 'Unable to reset password' });
   }
 }

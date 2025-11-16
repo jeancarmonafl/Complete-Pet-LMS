@@ -3,7 +3,6 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 
-import { TopbarControls } from '../components/TopbarControls';
 import { TrainingFlowModal } from '../components/TrainingFlowModal';
 import { SupervisorApprovalModal } from '../components/SupervisorApprovalModal';
 import { useAuthStore } from '../contexts/useAuthStore';
@@ -117,7 +116,6 @@ export default function DashboardPage() {
           </h1>
           <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">{user?.locationCode} - Complete-Pet LMS · {t('systemAdministratorDashboard')}</p>
         </div>
-        <TopbarControls />
       </div>
 
       {/* Stats Cards */}
@@ -140,7 +138,7 @@ export default function DashboardPage() {
         <div className="rounded-2xl border border-slate-100 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
           <div className="flex items-center justify-between">
             <div>
-              <h2 className="text-lg font-semibold text-slate-900 dark:text-white">{t('pendingTrainings')}</h2>
+              <h2 className="text-lg font-semibold text-slate-900 dark:text-white">{t('pendingTrainings') || 'Pending Trainings'}</h2>
             </div>
           </div>
           <div className="mt-4 space-y-3">
@@ -165,7 +163,7 @@ export default function DashboardPage() {
                     onClick={() => handleStartTraining(training)}
                     className="rounded-xl bg-primary px-3 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-primary/90"
                   >
-                    {t('startTraining')}
+                    {t('startTraining') || 'Start Training'}
                   </button>
                 </div>
               ))
@@ -176,13 +174,16 @@ export default function DashboardPage() {
         <div className="rounded-2xl border border-slate-100 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
           <div className="flex items-center justify-between">
             <div>
-              <h2 className="text-lg font-semibold text-slate-900 dark:text-white">{t('pendingApprovals')}</h2>
+              <h2 className="text-lg font-semibold text-slate-900 dark:text-white">{t('pendingApprovals') || 'Approvals pending'}</h2>
+              <p className="text-sm text-slate-500 dark:text-slate-400">
+                {t('pendingApprovalsSubtitle') || 'Review completed trainings awaiting supervisor sign-off.'}
+              </p>
             </div>
           </div>
           <div className="mt-4 space-y-3">
             {approvalsQueue.length === 0 ? (
               <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-700 dark:border-blue-500/40 dark:bg-blue-500/10 dark:text-blue-200">
-                {t('noApprovalsPending')}
+                {t('noApprovalsPending') || 'No Approvals Pending ✅'}
               </div>
             ) : (
               approvalsQueue.map((record) => (

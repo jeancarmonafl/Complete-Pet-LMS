@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { TrainingAssignment } from "../contexts/useTrainingStore";
 import { Modal } from "./Modal";
@@ -22,11 +22,99 @@ export function TrainingFlowModal({
   const [selectedAnswers, setSelectedAnswers] = useState<number[]>([]);
   const [quizScore, setQuizScore] = useState<number | null>(null);
   const [quizSubmitted, setQuizSubmitted] = useState(false);
-  const [signature, setSignature] = useState("");
   const [quizError, setQuizError] = useState<string | null>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const [signatureDataUrl, setSignatureDataUrl] = useState('');
   const [isDrawing, setIsDrawing] = useState(false);
-  const [hasSignature, setHasSignature] = useState(false);
+
+  const prepareCanvas = useCallback(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const context = canvas.getContext('2d');
+    if (!context) return;
+
+    const ratio = window.devicePixelRatio || 1;
+    const rect = canvas.getBoundingClientRect();
+    const width = rect.width || canvas.clientWidth;
+    const height = rect.height || canvas.clientHeight;
+
+    if (!width || !height) {
+      return;
+    }
+
+    canvas.width = width * ratio;
+    canvas.height = height * ratio;
+    context.setTransform(ratio, 0, 0, ratio, 0, 0);
+    context.lineCap = 'round';
+    context.lineJoin = 'round';
+    context.lineWidth = 2;
+    context.strokeStyle = '#0f172a';
+    context.clearRect(0, 0, canvas.width, canvas.height);
+  }, []);
+
+  const getPointerPosition = (event: React.PointerEvent<HTMLCanvasElement>) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return null;
+    const rect = canvas.getBoundingClientRect();
+    return {
+      x: event.clientX - rect.left,
+      y: event.clientY - rect.top
+    };
+  };
+
+  const handlePointerDown = (event: React.PointerEvent<HTMLCanvasElement>) => {
+    event.preventDefault();
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const context = canvas.getContext('2d');
+    if (!context) return;
+    const position = getPointerPosition(event);
+    if (!position) return;
+
+    context.beginPath();
+    context.moveTo(position.x, position.y);
+    setIsDrawing(true);
+    event.currentTarget.setPointerCapture(event.pointerId);
+  };
+
+  const handlePointerMove = (event: React.PointerEvent<HTMLCanvasElement>) => {
+    if (!isDrawing) return;
+    event.preventDefault();
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const context = canvas.getContext('2d');
+    if (!context) return;
+    const position = getPointerPosition(event);
+    if (!position) return;
+
+    context.lineTo(position.x, position.y);
+    context.stroke();
+  };
+
+  const handlePointerEnd = (event: React.PointerEvent<HTMLCanvasElement>) => {
+    if (!isDrawing) return;
+    const canvas = canvasRef.current;
+    const context = canvas?.getContext('2d');
+    context?.closePath();
+    setIsDrawing(false);
+
+    if (typeof event.currentTarget.releasePointerCapture === 'function') {
+      try {
+        event.currentTarget.releasePointerCapture(event.pointerId);
+      } catch {
+        // ignore if pointer capture was not active
+      }
+    }
+
+    if (canvas) {
+      setSignatureDataUrl(canvas.toDataURL('image/png'));
+    }
+  };
+
+  const handleClearSignature = useCallback(() => {
+    setSignatureDataUrl('');
+    prepareCanvas();
+  }, [prepareCanvas]);
 
   useEffect(() => {
     if (open && training) {
@@ -36,19 +124,11 @@ export function TrainingFlowModal({
       setSelectedAnswers(new Array(training.quiz.length).fill(-1));
       setQuizScore(null);
       setQuizSubmitted(false);
-      setSignature("");
+      setSignatureDataUrl('');
       setQuizError(null);
-      setHasSignature(false);
-      
-      // Clear canvas when modal opens
-      if (canvasRef.current) {
-        const ctx = canvasRef.current.getContext('2d');
-        if (ctx) {
-          ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
-        }
-      }
+      requestAnimationFrame(() => prepareCanvas());
     }
-  }, [open, training]);
+  }, [open, training, prepareCanvas]);
 
   useEffect(() => {
     if (!open || !training || step !== 0) return;
@@ -74,6 +154,16 @@ export function TrainingFlowModal({
       clearInterval(timer);
     };
   }, [open, training, step]);
+
+  useEffect(() => {
+    if (!open) return;
+
+    const handleResize = () => prepareCanvas();
+    window.addEventListener('resize', handleResize);
+    return () => {
+      window.removeEventListener('resize', handleResize);
+    };
+  }, [open, prepareCanvas]);
 
   const canAdvanceFromQuiz =
     quizSubmitted &&
@@ -118,13 +208,9 @@ export function TrainingFlowModal({
       return;
     }
 
-    if (step === 2 && quizScore !== null && hasSignature) {
-      // Convert canvas to base64 image
-      if (canvasRef.current) {
-        const signatureData = canvasRef.current.toDataURL();
-        onComplete({ quizScore, signature: signatureData });
-        onClose();
-      }
+    if (step === 2 && quizScore !== null && signatureDataUrl) {
+      onComplete({ quizScore, signature: signatureDataUrl });
+      onClose();
     }
   };
 
@@ -230,125 +316,56 @@ export function TrainingFlowModal({
     </div>
   );
 
-  const renderSignatureStep = () => {
-    const startDrawing = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
-      const canvas = canvasRef.current;
-      if (!canvas) return;
-      
-      setIsDrawing(true);
-      const rect = canvas.getBoundingClientRect();
-      const ctx = canvas.getContext('2d');
-      if (!ctx) return;
-      
-      let x, y;
-      if ('touches' in e) {
-        x = e.touches[0].clientX - rect.left;
-        y = e.touches[0].clientY - rect.top;
-      } else {
-        x = e.clientX - rect.left;
-        y = e.clientY - rect.top;
-      }
-      
-      ctx.beginPath();
-      ctx.moveTo(x, y);
-    };
-    
-    const draw = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
-      if (!isDrawing) return;
-      
-      const canvas = canvasRef.current;
-      if (!canvas) return;
-      
-      const rect = canvas.getBoundingClientRect();
-      const ctx = canvas.getContext('2d');
-      if (!ctx) return;
-      
-      let x, y;
-      if ('touches' in e) {
-        x = e.touches[0].clientX - rect.left;
-        y = e.touches[0].clientY - rect.top;
-      } else {
-        x = e.clientX - rect.left;
-        y = e.clientY - rect.top;
-      }
-      
-      ctx.lineWidth = 2;
-      ctx.lineCap = 'round';
-      ctx.strokeStyle = '#1e293b'; // slate-900
-      ctx.lineTo(x, y);
-      ctx.stroke();
-      setHasSignature(true);
-    };
-    
-    const stopDrawing = () => {
-      setIsDrawing(false);
-    };
-    
-    const clearSignature = () => {
-      const canvas = canvasRef.current;
-      if (!canvas) return;
-      
-      const ctx = canvas.getContext('2d');
-      if (ctx) {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        setHasSignature(false);
-      }
-    };
-    
-    return (
-      <div className="space-y-4">
-        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800/50">
-          <p className="text-sm font-semibold text-slate-900 dark:text-white">
-            Certification
-          </p>
-          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-            I certify that I have completed this training and understand the
-            requirements of {training?.title}.
-          </p>
-        </div>
+  const renderSignatureStep = () => (
+    <div className="space-y-4">
+      <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800/50">
+        <p className="text-sm font-semibold text-slate-900 dark:text-white">
+          Certification
+        </p>
+        <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+          I certify that I have completed this training and understand the requirements of {training?.title}.
+        </p>
+      </div>
 
-        <div>
-          <label className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-200">
-            Sign below with your pen or finger
-          </label>
-          <div className="relative">
-            <canvas
-              ref={canvasRef}
-              width={600}
-              height={200}
-              className="w-full cursor-crosshair rounded-xl border-2 border-slate-300 bg-white dark:border-slate-600 dark:bg-slate-900"
-              onMouseDown={startDrawing}
-              onMouseMove={draw}
-              onMouseUp={stopDrawing}
-              onMouseLeave={stopDrawing}
-              onTouchStart={startDrawing}
-              onTouchMove={draw}
-              onTouchEnd={stopDrawing}
-            />
-            {!hasSignature && (
-              <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-                <p className="text-sm text-slate-400 dark:text-slate-500">
-                  Sign here with your pen or touch device
-                </p>
-              </div>
-            )}
-          </div>
-          <div className="mt-2 flex items-center justify-between">
-            <p className="text-xs text-slate-500 dark:text-slate-400">
-              Signatures are stored as part of the audit trail for this training record.
-            </p>
-            <button
-              type="button"
-              onClick={clearSignature}
-              className="text-xs font-medium text-primary hover:underline"
-            >
-              Clear
-            </button>
-          </div>
+      <div>
+        <label className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-200">
+          Sign using your finger, stylus, or mouse
+        </label>
+        <div className="rounded-2xl border border-dashed border-slate-300 bg-white/80 p-3 dark:border-slate-600 dark:bg-slate-900/40">
+          <canvas
+            ref={canvasRef}
+            className="h-48 w-full touch-none"
+            onPointerDown={handlePointerDown}
+            onPointerMove={handlePointerMove}
+            onPointerUp={handlePointerEnd}
+            onPointerLeave={handlePointerEnd}
+            onPointerCancel={handlePointerEnd}
+          />
+        </div>
+        <div className="mt-2 flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
+          <span>Use a pen-enabled device for the most accurate signature.</span>
+          <button
+            type="button"
+            onClick={handleClearSignature}
+            className="font-semibold text-primary transition hover:text-primary/80"
+          >
+            Clear signature
+          </button>
         </div>
       </div>
-    );
-  };
+
+      {signatureDataUrl && (
+        <div className="rounded-2xl border border-slate-200 bg-white p-3 text-center dark:border-slate-700 dark:bg-slate-900">
+          <p className="text-xs font-medium text-slate-500 dark:text-slate-400">Captured signature preview</p>
+          <img
+            src={signatureDataUrl}
+            alt="Employee signature preview"
+            className="mx-auto mt-2 h-20 w-full object-contain"
+          />
+        </div>
+      )}
+    </div>
+  );
 
   const renderStep = () => {
     if (step === 0) return renderContentStep();
@@ -370,7 +387,7 @@ export function TrainingFlowModal({
   const primaryDisabled =
     (step === 0 && !contentComplete) ||
     (step === 1 && !canAdvanceFromQuiz) ||
-    (step === 2 && !hasSignature);
+    (step === 2 && !signatureDataUrl);
 
   return (
     <Modal

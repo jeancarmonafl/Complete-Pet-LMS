@@ -103,12 +103,29 @@ export default function UserManagementPage() {
       const response = await api.patch(`/users/${id}/status`, { isActive });
       return response.data;
     },
-    onSuccess: () => {
+    onMutate: async (variables) => {
+      await queryClient.cancelQueries({ queryKey: ['users'] });
+      const previousUsers = queryClient.getQueryData<any[]>(['users']);
+
+      queryClient.setQueryData(['users'], (old: any[] = []) =>
+        old.map((user) =>
+          user.id === variables.id
+            ? { ...user, isActive: variables.isActive, status: variables.isActive ? 'active' : 'inactive' }
+            : user
+        )
+      );
+
+      return { previousUsers };
+    },
+    onError: (error: any, _variables, context) => {
+      if (context?.previousUsers) {
+        queryClient.setQueryData(['users'], context.previousUsers);
+      }
+      alert(`Error updating user status: ${error.response?.data?.message || error.message}`);
+    },
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ['users'] });
       setOpenActionMenuId(null);
-    },
-    onError: (error: any) => {
-      alert(`Error updating user status: ${error.response?.data?.message || error.message}`);
     }
   });
 
@@ -202,7 +219,7 @@ export default function UserManagementPage() {
   const handleToggleStatus = (user: any) => {
     toggleUserStatusMutation.mutate({
       id: user.id,
-      isActive: user.status !== 'active'
+      isActive: !user.isActive
     });
   };
 
@@ -301,7 +318,7 @@ export default function UserManagementPage() {
           className="mt-4 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm outline-none focus:border-primary dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
         />
 
-        <div className="mt-6 overflow-hidden rounded-2xl border border-slate-100 dark:border-slate-800">
+        <div className="mt-6 overflow-x-auto rounded-2xl border border-slate-100 dark:border-slate-800">
           <table className="min-w-full divide-y divide-slate-100 dark:divide-slate-800">
             <thead className="bg-slate-50 dark:bg-slate-800/60">
               <tr>
@@ -377,7 +394,7 @@ export default function UserManagementPage() {
                           <EllipsisVerticalIcon className="h-5 w-5" />
                         </button>
                         {openActionMenuId === user.id && (
-                          <div className="absolute right-0 bottom-full mb-2 z-50 w-56 rounded-xl border border-slate-200 bg-white shadow-xl dark:border-slate-700 dark:bg-slate-800">
+                          <div className="absolute right-0 z-50 mt-2 w-56 rounded-xl border border-slate-200 bg-white shadow-xl dark:border-slate-700 dark:bg-slate-800">
                             <div className="py-1">
                               <button
                                 onClick={() => handleEdit(user)}
