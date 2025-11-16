@@ -394,7 +394,7 @@ export default function CourseManagementPage() {
           </span>
         </div>
 
-        <div className="mt-6 overflow-x-auto rounded-2xl border border-slate-100 dark:border-slate-800">
+        <div className="mt-6 overflow-x-auto overflow-y-visible rounded-2xl border border-slate-100 dark:border-slate-800">
           <table className="min-w-full divide-y divide-slate-100 dark:divide-slate-800">
             <thead className="bg-slate-50 dark:bg-slate-800/60">
               <tr>
@@ -492,7 +492,7 @@ export default function CourseManagementPage() {
                           <EllipsisVerticalIcon className="h-5 w-5" />
                         </button>
                         {openDropdownId === course.id && (
-                          <div className="absolute right-0 z-50 mt-2 w-56 rounded-lg border border-slate-200 bg-white shadow-lg dark:border-slate-700 dark:bg-slate-800">
+                          <div className="absolute right-0 z-[100] mt-2 w-56 rounded-lg border border-slate-200 bg-white shadow-xl dark:border-slate-700 dark:bg-slate-800">
                             <div className="py-1">
                               <button
                                 onClick={() => handleEdit(course)}

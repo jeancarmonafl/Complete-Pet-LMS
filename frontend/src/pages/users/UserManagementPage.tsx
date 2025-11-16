@@ -34,6 +34,7 @@ export default function UserManagementPage() {
   const [editingUser, setEditingUser] = useState<any>(null);
   const [createdEmployee, setCreatedEmployee] = useState<any>(null);
   const [openActionMenuId, setOpenActionMenuId] = useState<string | null>(null);
+  const [showFormerEmployees, setShowFormerEmployees] = useState(false);
   const actionMenuRefs = useRef<{ [key: string]: HTMLDivElement | null }>({});
   
   const { register, handleSubmit, reset, watch, setValue } = useForm<InviteForm>({
@@ -217,11 +218,27 @@ export default function UserManagementPage() {
   };
 
   const handleToggleStatus = (user: any) => {
+    const currentStatus = user.isActive ?? (user.status === 'active');
     toggleUserStatusMutation.mutate({
       id: user.id,
-      isActive: !user.isActive
+      isActive: !currentStatus
     });
   };
+
+  const handleToggleFormerEmployees = () => {
+    setShowFormerEmployees(!showFormerEmployees);
+  };
+
+  // Filter users based on former employees toggle
+  const filteredUsers = showFormerEmployees 
+    ? users.filter((u: any) => {
+        const isActive = u.isActive ?? (u.status === 'active');
+        return !isActive;
+      })
+    : users.filter((u: any) => {
+        const isActive = u.isActive ?? (u.status === 'active');
+        return isActive;
+      });
 
   const handleViewActivity = (user: any) => {
     setOpenActionMenuId(null);
@@ -306,7 +323,14 @@ export default function UserManagementPage() {
             <button className="rounded-xl border border-slate-200 px-4 py-2 text-sm text-slate-600 hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-300">
               {t('exportCSV')}
             </button>
-            <button className="rounded-xl border border-slate-200 px-4 py-2 text-sm text-slate-600 hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-300">
+            <button 
+              onClick={handleToggleFormerEmployees}
+              className={`rounded-xl border px-4 py-2 text-sm font-medium transition ${
+                showFormerEmployees
+                  ? 'border-primary bg-primary text-white'
+                  : 'border-slate-200 text-slate-600 hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-300'
+              }`}
+            >
               {t('formerEmployees')}
             </button>
           </div>
@@ -318,7 +342,7 @@ export default function UserManagementPage() {
           className="mt-4 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm outline-none focus:border-primary dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
         />
 
-        <div className="mt-6 overflow-x-auto rounded-2xl border border-slate-100 dark:border-slate-800">
+        <div className="mt-6 overflow-x-auto overflow-y-visible rounded-2xl border border-slate-100 dark:border-slate-800">
           <table className="min-w-full divide-y divide-slate-100 dark:divide-slate-800">
             <thead className="bg-slate-50 dark:bg-slate-800/60">
               <tr>
@@ -336,14 +360,17 @@ export default function UserManagementPage() {
                     Loading users...
                   </td>
                 </tr>
-              ) : users.length === 0 ? (
+              ) : filteredUsers.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="px-6 py-12 text-center text-sm text-slate-500 dark:text-slate-400">
-                    No users found. Create your first user above.
+                    {showFormerEmployees 
+                      ? (t('noFormerEmployees') || 'No former employees found.')
+                      : (t('noUsers') || 'No users found. Create your first user above.')
+                    }
                   </td>
                 </tr>
               ) : (
-                users.map((user: any) => (
+                filteredUsers.map((user: any) => (
                   <tr key={user.id}>
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
@@ -374,12 +401,12 @@ export default function UserManagementPage() {
                     <td className="px-6 py-4">
                       <span
                         className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${
-                          user.status === 'active'
+                          (user.isActive ?? (user.status === 'active'))
                             ? 'bg-emerald-100 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-200'
                             : 'bg-red-100 text-red-600 dark:bg-red-500/10 dark:text-red-200'
                         }`}
                       >
-                        {user.status === 'active' ? (t('active') || 'Active') : (t('inactive') || 'Inactive')}
+                        {(user.isActive ?? (user.status === 'active')) ? (t('active') || 'Active') : (t('inactive') || 'Inactive')}
                       </span>
                     </td>
                     <td className="px-6 py-4 text-sm text-slate-500 dark:text-slate-400">
@@ -394,7 +421,7 @@ export default function UserManagementPage() {
                           <EllipsisVerticalIcon className="h-5 w-5" />
                         </button>
                         {openActionMenuId === user.id && (
-                          <div className="absolute right-0 z-50 mt-2 w-56 rounded-xl border border-slate-200 bg-white shadow-xl dark:border-slate-700 dark:bg-slate-800">
+                          <div className="absolute right-0 z-[100] mt-2 w-56 rounded-xl border border-slate-200 bg-white shadow-xl dark:border-slate-700 dark:bg-slate-800">
                             <div className="py-1">
                               <button
                                 onClick={() => handleEdit(user)}
@@ -407,8 +434,8 @@ export default function UserManagementPage() {
                                 onClick={() => handleToggleStatus(user)}
                                 className="flex w-full items-center gap-2 px-4 py-2 text-sm text-slate-700 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-700"
                               >
-                                <PowerIcon className={`h-4 w-4 ${user.status === 'active' ? 'text-red-500' : 'text-emerald-500'}`} />
-                                {user.status === 'active' ? (t('deactivate') || 'Deactivate') : (t('reactivate') || 'Reactivate')}
+                                <PowerIcon className={`h-4 w-4 ${(user.isActive ?? (user.status === 'active')) ? 'text-red-500' : 'text-emerald-500'}`} />
+                                {(user.isActive ?? (user.status === 'active')) ? (t('deactivate') || 'Deactivate') : (t('reactivate') || 'Reactivate')}
                               </button>
                               <button
                                 onClick={() => handleViewActivity(user)}
