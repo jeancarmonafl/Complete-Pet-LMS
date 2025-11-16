@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 
 import { TrainingAssignment } from "../contexts/useTrainingStore";
 import { Modal } from "./Modal";
@@ -24,6 +24,9 @@ export function TrainingFlowModal({
   const [quizSubmitted, setQuizSubmitted] = useState(false);
   const [signature, setSignature] = useState("");
   const [quizError, setQuizError] = useState<string | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [isDrawing, setIsDrawing] = useState(false);
+  const [hasSignature, setHasSignature] = useState(false);
 
   useEffect(() => {
     if (open && training) {
@@ -35,6 +38,15 @@ export function TrainingFlowModal({
       setQuizSubmitted(false);
       setSignature("");
       setQuizError(null);
+      setHasSignature(false);
+      
+      // Clear canvas when modal opens
+      if (canvasRef.current) {
+        const ctx = canvasRef.current.getContext('2d');
+        if (ctx) {
+          ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+        }
+      }
     }
   }, [open, training]);
 
@@ -106,9 +118,13 @@ export function TrainingFlowModal({
       return;
     }
 
-    if (step === 2 && quizScore !== null && signature.trim().length >= 3) {
-      onComplete({ quizScore, signature: signature.trim() });
-      onClose();
+    if (step === 2 && quizScore !== null && hasSignature) {
+      // Convert canvas to base64 image
+      if (canvasRef.current) {
+        const signatureData = canvasRef.current.toDataURL();
+        onComplete({ quizScore, signature: signatureData });
+        onClose();
+      }
     }
   };
 
@@ -214,36 +230,125 @@ export function TrainingFlowModal({
     </div>
   );
 
-  const renderSignatureStep = () => (
-    <div className="space-y-4">
-      <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800/50">
-        <p className="text-sm font-semibold text-slate-900 dark:text-white">
-          Certification
-        </p>
-        <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-          I certify that I have completed this training and understand the
-          requirements of {training?.title}.
-        </p>
-      </div>
+  const renderSignatureStep = () => {
+    const startDrawing = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      
+      setIsDrawing(true);
+      const rect = canvas.getBoundingClientRect();
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+      
+      let x, y;
+      if ('touches' in e) {
+        x = e.touches[0].clientX - rect.left;
+        y = e.touches[0].clientY - rect.top;
+      } else {
+        x = e.clientX - rect.left;
+        y = e.clientY - rect.top;
+      }
+      
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+    };
+    
+    const draw = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
+      if (!isDrawing) return;
+      
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      
+      const rect = canvas.getBoundingClientRect();
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+      
+      let x, y;
+      if ('touches' in e) {
+        x = e.touches[0].clientX - rect.left;
+        y = e.touches[0].clientY - rect.top;
+      } else {
+        x = e.clientX - rect.left;
+        y = e.clientY - rect.top;
+      }
+      
+      ctx.lineWidth = 2;
+      ctx.lineCap = 'round';
+      ctx.strokeStyle = '#1e293b'; // slate-900
+      ctx.lineTo(x, y);
+      ctx.stroke();
+      setHasSignature(true);
+    };
+    
+    const stopDrawing = () => {
+      setIsDrawing(false);
+    };
+    
+    const clearSignature = () => {
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        setHasSignature(false);
+      }
+    };
+    
+    return (
+      <div className="space-y-4">
+        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800/50">
+          <p className="text-sm font-semibold text-slate-900 dark:text-white">
+            Certification
+          </p>
+          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+            I certify that I have completed this training and understand the
+            requirements of {training?.title}.
+          </p>
+        </div>
 
-      <div>
-        <label className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-200">
-          Enter your full name as a digital signature
-        </label>
-        <input
-          type="text"
-          value={signature}
-          onChange={(event) => setSignature(event.target.value)}
-          className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-primary dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-          placeholder="e.g., Jean Carmona"
-        />
-        <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-          Signatures are stored as part of the audit trail for this training
-          record.
-        </p>
+        <div>
+          <label className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-200">
+            Sign below with your pen or finger
+          </label>
+          <div className="relative">
+            <canvas
+              ref={canvasRef}
+              width={600}
+              height={200}
+              className="w-full cursor-crosshair rounded-xl border-2 border-slate-300 bg-white dark:border-slate-600 dark:bg-slate-900"
+              onMouseDown={startDrawing}
+              onMouseMove={draw}
+              onMouseUp={stopDrawing}
+              onMouseLeave={stopDrawing}
+              onTouchStart={startDrawing}
+              onTouchMove={draw}
+              onTouchEnd={stopDrawing}
+            />
+            {!hasSignature && (
+              <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                <p className="text-sm text-slate-400 dark:text-slate-500">
+                  Sign here with your pen or touch device
+                </p>
+              </div>
+            )}
+          </div>
+          <div className="mt-2 flex items-center justify-between">
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              Signatures are stored as part of the audit trail for this training record.
+            </p>
+            <button
+              type="button"
+              onClick={clearSignature}
+              className="text-xs font-medium text-primary hover:underline"
+            >
+              Clear
+            </button>
+          </div>
+        </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   const renderStep = () => {
     if (step === 0) return renderContentStep();
@@ -265,7 +370,7 @@ export function TrainingFlowModal({
   const primaryDisabled =
     (step === 0 && !contentComplete) ||
     (step === 1 && !canAdvanceFromQuiz) ||
-    (step === 2 && signature.trim().length < 3);
+    (step === 2 && !hasSignature);
 
   return (
     <Modal

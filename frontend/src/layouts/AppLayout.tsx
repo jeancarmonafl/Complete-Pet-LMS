@@ -3,7 +3,7 @@ import { PropsWithChildren } from 'react';
 import { NavLink } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 
-import { LanguageToggle } from '../components/LanguageToggle';
+import { TopbarControls } from '../components/TopbarControls';
 import { Logo } from '../components/Logo';
 import { useAuthStore } from '../contexts/useAuthStore';
 import { formatRole } from '../utils/format';
@@ -24,7 +24,7 @@ export function AppLayout({ children }: PropsWithChildren) {
 
   return (
     <div className="flex min-h-screen bg-slate-50 dark:bg-slate-950">
-      <aside className="hidden w-64 shrink-0 border-r border-slate-100 bg-white/80 px-4 py-6 shadow-sm backdrop-blur dark:border-slate-800 dark:bg-slate-900 lg:flex lg:flex-col">
+      <aside className="fixed left-0 top-0 hidden h-screen w-64 shrink-0 border-r border-slate-100 bg-white/80 px-4 py-6 shadow-sm backdrop-blur dark:border-slate-800 dark:bg-slate-900 lg:flex lg:flex-col">
         <div className="flex items-center gap-3 px-2">
           <Logo size="md" className="shrink-0" />
           <div>
@@ -32,7 +32,7 @@ export function AppLayout({ children }: PropsWithChildren) {
             <p className="text-xs text-slate-500 dark:text-slate-400 uppercase">{formatRole(user?.role)}</p>
           </div>
         </div>
-        <nav className="mt-8 space-y-1">
+        <nav className="mt-8 space-y-1 overflow-y-auto flex-1">
           {navigation.map((item) => (
             <NavLink
               key={item.name}
@@ -52,7 +52,7 @@ export function AppLayout({ children }: PropsWithChildren) {
         </nav>
         <div className="mt-auto space-y-3">
           <div className="px-2">
-            <LanguageToggle />
+            <TopbarControls />
           </div>
           <div className="rounded-xl border border-slate-200 px-3 py-2 text-xs text-slate-500 dark:border-slate-700 dark:text-slate-400">
             <p className="font-semibold text-slate-700 dark:text-slate-200">{user?.fullName}</p>
@@ -66,7 +66,7 @@ export function AppLayout({ children }: PropsWithChildren) {
           </button>
         </div>
       </aside>
-      <div className="flex flex-1 flex-col">
+      <div className="flex flex-1 flex-col lg:ml-64">
         <main className="flex-1 bg-slate-50/60 px-4 py-8 dark:bg-slate-950/60 lg:px-10">{children}</main>
       </div>
     </div>

@@ -221,9 +221,16 @@ export default function CourseManagementPage() {
     setValue('selectedPositions', course.assigned_positions || []);
     setValue('exceptionPositions', course.exception_positions || []);
     setValue('isActive', course.is_active ?? true);
-    // Set quiz questions if available
-    if (course.questions && Array.isArray(course.questions)) {
+    // Set quiz questions if available, otherwise use default structure
+    if (course.questions && Array.isArray(course.questions) && course.questions.length > 0) {
       setValue('questions', course.questions);
+    } else {
+      setValue('questions', [
+        { question: '', answers: ['', '', '', ''], correctAnswerIndex: 0 },
+        { question: '', answers: ['', '', '', ''], correctAnswerIndex: 0 },
+        { question: '', answers: ['', '', '', ''], correctAnswerIndex: 0 },
+        { question: '', answers: ['', '', '', ''], correctAnswerIndex: 0 }
+      ]);
     }
     setOpenDropdownId(null);
     setEditOpen(true);
@@ -272,7 +279,8 @@ export default function CourseManagementPage() {
         positionScope: data.positionScope,
         selectedPositions: data.selectedPositions,
         exceptionPositions: data.exceptionPositions,
-        questions: data.questions
+        questions: data.questions,
+        isActive: data.isActive
       }
     });
   };
@@ -436,7 +444,7 @@ export default function CourseManagementPage() {
                           <EllipsisVerticalIcon className="h-5 w-5" />
                         </button>
                         {openDropdownId === course.id && (
-                          <div className="absolute right-0 z-50 mt-2 w-56 rounded-lg border border-slate-200 bg-white shadow-lg dark:border-slate-700 dark:bg-slate-800">
+                          <div className="absolute right-0 bottom-full mb-2 z-50 w-56 rounded-lg border border-slate-200 bg-white shadow-lg dark:border-slate-700 dark:bg-slate-800">
                             <div className="py-1">
                               <button
                                 onClick={() => handleEdit(course)}
@@ -734,10 +742,10 @@ export default function CourseManagementPage() {
 
               <div>
                 <h3 className="text-sm font-semibold text-slate-900 dark:text-white">
-                  {t('assignmentExceptions') || 'Exceptions'}
+                  {t('assignmentExceptions')}
                 </h3>
                 <p className="mt-1 text-xs text-slate-600 dark:text-slate-400">
-                  {t('assignmentExceptionsDesc') || 'Exclude specific positions from this training requirement.'}
+                  {t('assignmentExceptionsDesc')}
                 </p>
                 <div className="mt-4 space-y-2 rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800">
                   {positions.map((pos) => (
@@ -1086,10 +1094,10 @@ export default function CourseManagementPage() {
 
               <div>
                 <h3 className="text-sm font-semibold text-slate-900 dark:text-white">
-                  {t('assignmentExceptions') || 'Exceptions'}
+                  {t('assignmentExceptions')}
                 </h3>
                 <p className="mt-1 text-xs text-slate-600 dark:text-slate-400">
-                  {t('assignmentExceptionsDesc') || 'Exclude specific positions from this training requirement.'}
+                  {t('assignmentExceptionsDesc')}
                 </p>
                 <div className="mt-4 space-y-2 rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800">
                   {positions.map((pos) => (

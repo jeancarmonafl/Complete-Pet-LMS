@@ -202,7 +202,7 @@ export default function UserManagementPage() {
   const handleToggleStatus = (user: any) => {
     toggleUserStatusMutation.mutate({
       id: user.id,
-      isActive: !user.isActive
+      isActive: user.status !== 'active'
     });
   };
 
@@ -377,7 +377,7 @@ export default function UserManagementPage() {
                           <EllipsisVerticalIcon className="h-5 w-5" />
                         </button>
                         {openActionMenuId === user.id && (
-                          <div className="absolute right-0 z-50 mt-2 w-56 rounded-xl border border-slate-200 bg-white shadow-xl dark:border-slate-700 dark:bg-slate-800">
+                          <div className="absolute right-0 bottom-full mb-2 z-50 w-56 rounded-xl border border-slate-200 bg-white shadow-xl dark:border-slate-700 dark:bg-slate-800">
                             <div className="py-1">
                               <button
                                 onClick={() => handleEdit(user)}
