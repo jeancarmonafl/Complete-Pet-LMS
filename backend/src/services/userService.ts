@@ -16,6 +16,7 @@ interface CreateUserPayload {
   role: Role;
   supervisorId?: string | null;
   joinedDate?: string | null;
+  password?: string | null;
 }
 
 export interface CreatedUserCredentials {
@@ -49,7 +50,7 @@ export async function createUser(payload: CreateUserPayload): Promise<CreatedUse
     const nextSequence = await fetchNextEmployeeSequence(payload.locationId);
     const employeeId = buildEmployeeId(nextSequence);
     const loginIdentifier = buildLoginIdentifier(payload.fullName, employeeId, payload.email);
-    const temporaryPassword = generateTemporaryPassword();
+    const temporaryPassword = payload.password || generateTemporaryPassword();
     const passwordHash = await hashPassword(temporaryPassword);
 
     const insertResult = await client.query<{

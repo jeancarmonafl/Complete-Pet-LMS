@@ -11,7 +11,8 @@ const createUserSchema = z.object({
   jobTitle: z.string().optional(),
   role: z.enum(['global_admin', 'admin', 'manager', 'supervisor', 'employee']),
   supervisorId: z.string().uuid().optional(),
-  joinedDate: z.string().optional()
+  joinedDate: z.string().optional(),
+  password: z.string().min(8).optional()
 });
 
 const userStatusSchema = z.object({
@@ -43,7 +44,8 @@ export async function createUserHandler(req: AuthenticatedRequest, res: Response
       jobTitle: body.jobTitle,
       role: body.role,
       supervisorId: body.supervisorId,
-      joinedDate: body.joinedDate
+      joinedDate: body.joinedDate,
+      password: body.password
     });
 
     return res.status(201).json(result);
