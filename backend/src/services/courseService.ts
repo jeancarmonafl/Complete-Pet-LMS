@@ -1,3 +1,5 @@
+import type { PoolClient } from 'pg';
+
 import pool from '../config/database.js';
 
 interface CoursePayload {
@@ -149,10 +151,7 @@ export async function deleteCourse(
 
     const { id: scopedCourseId } = courseResult.rows[0];
 
-    await client.query('DELETE FROM quiz_attempts WHERE course_id = $1', [scopedCourseId]);
-    await client.query('DELETE FROM training_records WHERE course_id = $1', [scopedCourseId]);
-    await client.query('DELETE FROM enrollments WHERE course_id = $1', [scopedCourseId]);
-    await client.query('DELETE FROM quizzes WHERE course_id = $1', [scopedCourseId]);
+    await deleteCourseDependencies(client, scopedCourseId);
 
     const deleteResult = await client.query(
       'DELETE FROM courses WHERE id = $1 RETURNING *',
@@ -167,6 +166,142 @@ export async function deleteCourse(
   } finally {
     client.release();
   }
+}
+
+type TableColumnMap = Map<string, Set<string>>;
+
+async function deleteCourseDependencies(client: PoolClient, courseId: string) {
+  const referencingResult = await client.query<{
+    table_name: string;
+    column_name: string;
+  }>(
+    `
+      SELECT
+        tc.table_name,
+        kcu.column_name
+      FROM information_schema.table_constraints tc
+      JOIN information_schema.key_column_usage kcu
+        ON tc.constraint_name = kcu.constraint_name
+       AND tc.table_schema = kcu.table_schema
+      JOIN information_schema.constraint_column_usage ccu
+        ON ccu.constraint_name = tc.constraint_name
+       AND ccu.table_schema = tc.table_schema
+      WHERE tc.constraint_type = 'FOREIGN KEY'
+        AND tc.table_schema = 'public'
+        AND ccu.table_name = 'courses'
+        AND ccu.column_name = 'id'
+    `
+  );
+
+  if (referencingResult.rowCount === 0) {
+    return;
+  }
+
+  const tableColumnMap: TableColumnMap = new Map();
+
+  for (const row of referencingResult.rows) {
+    if (!tableColumnMap.has(row.table_name)) {
+      tableColumnMap.set(row.table_name, new Set());
+    }
+    tableColumnMap.get(row.table_name)!.add(row.column_name);
+  }
+
+  const tableNames = Array.from(tableColumnMap.keys());
+  const deletionOrder = await resolveDeletionOrder(client, tableNames);
+
+  for (const tableName of deletionOrder) {
+    const columns = tableColumnMap.get(tableName);
+    if (!columns) continue;
+
+    for (const columnName of columns) {
+      const deleteSql = `DELETE FROM ${quoteIdentifier(tableName)} WHERE ${quoteIdentifier(columnName)} = $1`;
+      await client.query(deleteSql, [courseId]);
+    }
+  }
+}
+
+async function resolveDeletionOrder(client: PoolClient, tableNames: string[]) {
+  if (tableNames.length === 0) {
+    return [];
+  }
+
+  const dependencyResult = await client.query<{
+    referencing_table: string;
+    referenced_table: string;
+  }>(
+    `
+      SELECT
+        tc.table_name AS referencing_table,
+        ccu.table_name AS referenced_table
+      FROM information_schema.table_constraints tc
+      JOIN information_schema.constraint_column_usage ccu
+        ON ccu.constraint_name = tc.constraint_name
+       AND ccu.table_schema = tc.table_schema
+      WHERE tc.constraint_type = 'FOREIGN KEY'
+        AND tc.table_schema = 'public'
+        AND tc.table_name = ANY($1)
+        AND ccu.table_name = ANY($2)
+    `,
+    [tableNames, [...tableNames, 'courses']]
+  );
+
+  const adjacency = new Map<string, Set<string>>();
+  const inDegree = new Map<string, number>();
+
+  tableNames.forEach((table) => {
+    adjacency.set(table, new Set());
+    inDegree.set(table, 0);
+  });
+
+  for (const row of dependencyResult.rows) {
+    const from = row.referencing_table;
+    const to = row.referenced_table;
+
+    if (!adjacency.has(from) || !adjacency.has(to) || from === to) {
+      continue;
+    }
+
+    const neighbors = adjacency.get(from)!;
+
+    if (!neighbors.has(to)) {
+      neighbors.add(to);
+      inDegree.set(to, (inDegree.get(to) ?? 0) + 1);
+    }
+  }
+
+  const queue: string[] = [];
+  inDegree.forEach((degree, table) => {
+    if (degree === 0) {
+      queue.push(table);
+    }
+  });
+
+  const ordered: string[] = [];
+
+  while (queue.length > 0) {
+    const table = queue.shift()!;
+    ordered.push(table);
+
+    adjacency.get(table)?.forEach((neighbor) => {
+      const nextDegree = (inDegree.get(neighbor) ?? 0) - 1;
+      inDegree.set(neighbor, nextDegree);
+
+      if (nextDegree === 0) {
+        queue.push(neighbor);
+      }
+    });
+  }
+
+  if (ordered.length !== tableNames.length) {
+    const remaining = tableNames.filter((table) => !ordered.includes(table));
+    return [...ordered, ...remaining];
+  }
+
+  return ordered;
+}
+
+function quoteIdentifier(identifier: string) {
+  return `"${identifier.replace(/"/g, '""')}"`;
 }
 
 export async function updateCourseStatus(courseId: string, locationId: string, isActive: boolean) {
