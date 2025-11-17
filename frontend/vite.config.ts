@@ -3,6 +3,9 @@ import { defineConfig } from 'vite';
 
 export default defineConfig({
   plugins: [react()],
+  resolve: {
+    extensions: ['.ts', '.tsx', '.js', '.jsx', '.json']
+  },
   server: {
     port: 5173,
     proxy: {
