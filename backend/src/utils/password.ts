@@ -1,4 +1,4 @@
-import bcrypt from 'bcrypt';
+import bcrypt from 'bcryptjs';
 import { webcrypto } from 'node:crypto';
 
 import env from '../config/env.js';
