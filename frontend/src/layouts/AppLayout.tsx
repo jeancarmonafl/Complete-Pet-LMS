@@ -18,7 +18,6 @@ export function AppLayout({ children }: PropsWithChildren) {
     { name: t('courseManagement'), href: '/app/courses', icon: BuildingOffice2Icon },
     { name: t('trainingMatrix'), href: '/app/matrix', icon: AcademicCapIcon },
     { name: t('reportsAnalytics'), href: '/app/reports', icon: ChartBarIcon },
-    { name: t('administration'), href: '/app/admin', icon: Cog6ToothIcon },
     { name: t('systemSettings'), href: '/app/settings', icon: Cog6ToothIcon }
   ];
 

@@ -3,7 +3,6 @@ import { Navigate, Route, Routes } from 'react-router-dom';
 import { useAuthStore } from '../contexts/useAuthStore';
 import { AppLayout } from '../layouts/AppLayout';
 import { AuthLayout } from '../layouts/AuthLayout';
-import AdminPage from '../pages/admin/AdminPage';
 import DashboardPage from '../pages/DashboardPage';
 import LandingPage from '../pages/LandingPage';
 import LoginPage from '../pages/LoginPage';
@@ -44,7 +43,6 @@ function AppRoutes() {
                 <Route path="courses" element={<CourseManagementPage />} />
                 <Route path="matrix" element={<TrainingMatrixPage />} />
                 <Route path="reports" element={<ReportsPage />} />
-                <Route path="admin" element={<AdminPage />} />
                 <Route path="settings" element={<SystemSettingsPage />} />
                 <Route path="*" element={<Navigate to="/app/dashboard" replace />} />
               </Routes>
