@@ -6,6 +6,31 @@ import { generateTemporaryPassword, hashPassword } from '../utils/password.js';
 
 type Role = 'global_admin' | 'admin' | 'manager' | 'supervisor' | 'employee';
 
+interface CourseAssignmentRuleRow {
+  id: string;
+  title: string;
+  content_type: string;
+  assigned_departments: string[] | null;
+  assigned_positions: string[] | null;
+  assign_to_entire_company: boolean;
+  exception_positions: string[] | null;
+}
+
+interface ActivityRow {
+  id: string;
+  course_id: string;
+  course_title: string;
+  content_type: string;
+  status: string | null;
+  progress_percentage: number | null;
+  deadline: string | null;
+  started_date: string | null;
+  completed_date: string | null;
+  quiz_score: number | null;
+  approval_status: string | null;
+  supervisor_signature_date: string | null;
+}
+
 interface CreateUserPayload {
   organizationId: string;
   locationId: string;
@@ -28,6 +53,54 @@ export interface CreatedUserCredentials {
   department?: string | null;
   jobTitle?: string | null;
   role: string;
+}
+
+function normalizeString(value?: string | null): string {
+  return value?.trim().toLowerCase() ?? '';
+}
+
+function matchesScope(value: string | null, scope?: string[] | null): boolean {
+  if (!scope || scope.length === 0) {
+    return false;
+  }
+
+  const normalizedValue = normalizeString(value);
+  return scope.some((entry) => normalizeString(entry) === normalizedValue);
+}
+
+function shouldAssignCourseToUser(
+  course: CourseAssignmentRuleRow,
+  user: { department: string | null; job_title: string | null }
+): boolean {
+  const exceptionPositions = course.exception_positions ?? [];
+  const isException = matchesScope(user.job_title, exceptionPositions);
+
+  if (isException) {
+    return false;
+  }
+
+  if (course.assign_to_entire_company) {
+    return true;
+  }
+
+  const hasDepartmentScope = Boolean(course.assigned_departments?.length);
+  const hasPositionScope = Boolean(course.assigned_positions?.length);
+  const departmentMatches = matchesScope(user.department, course.assigned_departments);
+  const positionMatches = matchesScope(user.job_title, course.assigned_positions);
+
+  if (hasDepartmentScope && hasPositionScope) {
+    return departmentMatches || positionMatches;
+  }
+
+  if (hasDepartmentScope) {
+    return departmentMatches;
+  }
+
+  if (hasPositionScope) {
+    return positionMatches;
+  }
+
+  return true;
 }
 
 async function fetchNextEmployeeSequence(locationId: string): Promise<number> {
@@ -213,6 +286,8 @@ export async function getUserActivity(userId: string, locationId?: string) {
       `
         SELECT
           id,
+          organization_id,
+          location_id,
           full_name,
           employee_id,
           department,
@@ -232,9 +307,11 @@ export async function getUserActivity(userId: string, locationId?: string) {
       return null;
     }
 
+    const user = userResult.rows[0];
+
     const summaryResult = await client.query(
       `
-        SELECT 
+        SELECT
           COUNT(*)::int AS total_assignments,
           COUNT(*) FILTER (WHERE status = 'completed')::int AS completed_assignments,
           COUNT(*) FILTER (WHERE status <> 'completed')::int AS pending_assignments,
@@ -262,8 +339,9 @@ export async function getUserActivity(userId: string, locationId?: string) {
 
     const activityResult = await client.query(
       `
-        SELECT 
+        SELECT
           e.id,
+          e.course_id,
           c.title AS course_title,
           c.content_type,
           e.status,
@@ -283,13 +361,60 @@ export async function getUserActivity(userId: string, locationId?: string) {
       [userId]
     );
 
+    const assignableCoursesResult = await client.query<CourseAssignmentRuleRow>(
+      `
+        SELECT
+          id,
+          title,
+          content_type,
+          assigned_departments,
+          assigned_positions,
+          assign_to_entire_company,
+          exception_positions
+        FROM courses
+        WHERE organization_id = $1
+          AND location_id = $2
+          AND COALESCE(is_active, true) = true
+          AND COALESCE(is_published, false) = true
+      `,
+      [user.organization_id, user.location_id]
+    );
+
+    const existingActivity = activityResult.rows as ActivityRow[];
+    const existingActivityByCourse = new Map(existingActivity.map((entry) => [entry.course_id, entry]));
+
+    const missingAssignments = assignableCoursesResult.rows
+      .filter((course) => shouldAssignCourseToUser(course, { department: user.department, job_title: user.job_title }))
+      .filter((course) => !existingActivityByCourse.has(course.id))
+      .map<ActivityRow>((course) => ({
+        id: `virtual-${course.id}`,
+        course_id: course.id,
+        course_title: course.title,
+        content_type: course.content_type,
+        status: 'not_started',
+        progress_percentage: 0,
+        deadline: null,
+        started_date: null,
+        completed_date: null,
+        quiz_score: null,
+        approval_status: null,
+        supervisor_signature_date: null
+      }));
+
+    const combinedActivity = [...existingActivity, ...missingAssignments];
+    const summaryRow = summaryResult.rows[0];
+    const totalAssignments = summaryRow.total_assignments + missingAssignments.length;
+    const pendingAssignments = summaryRow.pending_assignments + missingAssignments.length;
+
     return {
-      user: userResult.rows[0],
+      user,
       summary: {
-        ...summaryResult.rows[0],
+        ...summaryRow,
+        total_assignments: totalAssignments,
+        pending_assignments: pendingAssignments,
         avg_quiz_score: quizStatsResult.rows[0]?.avg_quiz_score ?? null
       },
-      activity: activityResult.rows
+      activity: combinedActivity
     };
   } finally {
     client.release();
