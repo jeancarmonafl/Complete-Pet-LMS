@@ -1,34 +1,27 @@
 import { DocumentArrowDownIcon, EyeIcon } from '@heroicons/react/24/outline';
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useQuery } from '@tanstack/react-query';
 
 import { useTrainingStore } from '../../contexts/useTrainingStore';
 import { generateCVS_ADM_005_PDF } from '../../utils/pdfGenerator';
+import api from '../../services/apiClient';
 
-// Mock data - in real implementation, this would come from API
-const employees = [
-  { 
-    id: 'EMP001',
-    name: 'Jean Carmona', 
-    employeeId: 'EMP001', 
-    department: 'Administration',
-    jobTitle: 'System Administrator',
-    status: 'active'
-  }
-];
+interface EmployeeRecord {
+  id: string;
+  name: string;
+  employeeId: string;
+  department?: string | null;
+  jobTitle?: string | null;
+  status: 'active' | 'inactive' | 'former';
+}
 
-const courses = [
-  { 
-    id: 'SOP-101',
-    title: 'SOP-101 Animal Handling',
-    description: 'Standard Operating Procedure for safe and humane animal handling practices'
-  },
-  { 
-    id: 'SOP-102',
-    title: 'Safety Orientation',
-    description: 'General workplace safety and emergency procedures'
-  }
-];
+interface CourseRecord {
+  id: string;
+  title: string;
+  description?: string | null;
+  isActive: boolean;
+}
 
 // Training completion records - showing multiple versions for same course
 interface CompletionRecord {
@@ -112,6 +105,41 @@ export default function TrainingMatrixPage() {
   const [viewingHistory, setViewingHistory] = useState<{employeeId: string, courseId: string} | null>(null);
   const [showFormerEmployees, setShowFormerEmployees] = useState(false);
   const { completedTrainings } = useTrainingStore();
+  const { data: users = [], isLoading: isUsersLoading } = useQuery({
+    queryKey: ['users'],
+    queryFn: async () => {
+      const response = await api.get('/users');
+      return response.data;
+    }
+  });
+  const { data: coursesData = [], isLoading: isCoursesLoading } = useQuery({
+    queryKey: ['courses'],
+    queryFn: async () => {
+      const response = await api.get('/courses');
+      return response.data;
+    }
+  });
+
+  const employees: EmployeeRecord[] = useMemo(() => (
+    (users as any[]).map((user) => ({
+      id: user.id,
+      name: user.full_name ?? user.fullName ?? 'Unnamed Employee',
+      employeeId: user.employee_id ?? user.employeeId ?? 'N/A',
+      department: user.department ?? null,
+      jobTitle: user.job_title ?? user.jobTitle ?? null,
+      status: (user.status as EmployeeRecord['status'])
+        ?? (user.isActive === false ? 'inactive' : 'active')
+    }))
+  ), [users]);
+
+  const courses: CourseRecord[] = useMemo(() => (
+    (coursesData as any[]).map((course) => ({
+      id: course.id,
+      title: course.title,
+      description: course.description ?? null,
+      isActive: (course.is_active ?? course.isActive ?? true) as boolean
+    })).filter((course) => course.isActive)
+  ), [coursesData]);
 
   const dynamicRecords: CompletionRecord[] = completedTrainings
     .filter((record) => record.status === 'approved')
@@ -164,13 +192,13 @@ const getLatestRecord = (employeeId: string, courseId: string, records: Completi
       employeeFirstName: firstName,
       employeeLastName: lastName,
       employeeId: employee.employeeId,
-      department: employee.department,
-      jobTitle: employee.jobTitle,
-      
+      department: employee.department ?? 'Not specified',
+      jobTitle: employee.jobTitle ?? 'Not specified',
+
       // Training Information
       sopNumber: course.id,
       courseTitle: course.title,
-      courseDescription: course.description,
+      courseDescription: course.description ?? 'Course description not provided.',
       contentType: 'Video',
       
       // Completion Details
@@ -194,7 +222,12 @@ const getLatestRecord = (employeeId: string, courseId: string, records: Completi
     });
   };
 
-  const filteredEmployees = showFormerEmployees ? employees.filter((employee) => employee.status === 'former') : employees.filter((employee) => employee.status !== 'former');
+  const filteredEmployees = showFormerEmployees
+    ? employees.filter((employee) => employee.status !== 'active')
+    : employees.filter((employee) => employee.status === 'active');
+
+  const isLoading = isUsersLoading || isCoursesLoading;
+  const totalColumns = Math.max(courses.length + 1, 1);
 
   return (
     <div className="space-y-8">
@@ -236,7 +269,7 @@ const getLatestRecord = (employeeId: string, courseId: string, records: Completi
                   : 'border-slate-200 text-slate-600 hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-300'
               }`}
             >
-              {showFormerEmployees ? 'Show Active' : 'Former Employees'}
+              {showFormerEmployees ? 'Show Active' : 'Inactive Users'}
             </button>
           </div>
         </div>
@@ -255,7 +288,28 @@ const getLatestRecord = (employeeId: string, courseId: string, records: Completi
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 bg-white dark:divide-slate-800 dark:bg-slate-900">
-              {filteredEmployees.map((employee) => (
+              {isLoading && (
+                <tr>
+                  <td colSpan={totalColumns} className="px-6 py-6 text-center text-sm text-slate-500 dark:text-slate-400">
+                    Loading training matrix…
+                  </td>
+                </tr>
+              )}
+              {!isLoading && courses.length === 0 && (
+                <tr>
+                  <td colSpan={totalColumns} className="px-6 py-6 text-center text-sm text-slate-500 dark:text-slate-400">
+                    No active courses available. Create or activate a course to populate the matrix.
+                  </td>
+                </tr>
+              )}
+              {!isLoading && courses.length > 0 && filteredEmployees.length === 0 && (
+                <tr>
+                  <td colSpan={totalColumns} className="px-6 py-6 text-center text-sm text-slate-500 dark:text-slate-400">
+                    No employees to display for this view.
+                  </td>
+                </tr>
+              )}
+              {!isLoading && courses.length > 0 && filteredEmployees.map((employee) => (
                 <tr key={employee.employeeId}>
                   <td className="px-6 py-4">
                     <div className="flex flex-col">
