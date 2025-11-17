@@ -1,4 +1,5 @@
 import {
+  ArrowPathIcon,
   ArrowUpTrayIcon,
   EllipsisVerticalIcon,
   PlusIcon,
@@ -94,6 +95,7 @@ export default function CourseManagementPage() {
   const [sortField, setSortField] = useState<string>('created_at');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const [searchQuery, setSearchQuery] = useState('');
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const dropdownRefs = useRef<{ [key: string]: HTMLDivElement | null }>({});
   
   const { register, handleSubmit, reset, watch, setValue } = useForm<CourseForm>({
@@ -160,17 +162,40 @@ export default function CourseManagementPage() {
   });
 
   // Delete course mutation
-  const deleteCourseMutation = useMutation({
+  const deleteCourseMutation = useMutation<
+    { id?: string; message?: string },
+    any,
+    string,
+    { previousCourses?: any[] }
+  >({
     mutationFn: async (courseId: string) => {
       const response = await api.delete(`/courses/${courseId}`);
-      return response.data;
+      return response.data as { id?: string; message?: string };
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['courses'] });
-      alert('Course deleted successfully!');
+    onMutate: async (courseId: string) => {
+      setPendingDeleteId(courseId);
+      await queryClient.cancelQueries({ queryKey: ['courses'] });
+      const previousCourses = queryClient.getQueryData<any[]>(['courses']);
+
+      queryClient.setQueryData(['courses'], (old: any[] = []) =>
+        old.filter((course) => course.id !== courseId)
+      );
+
+      return { previousCourses };
     },
-    onError: (error: any) => {
+    onError: (error: any, _courseId, context) => {
+      if (context?.previousCourses) {
+        queryClient.setQueryData(['courses'], context.previousCourses);
+      }
       alert(`Error deleting course: ${error.response?.data?.message || error.message}`);
+    },
+    onSuccess: (data) => {
+      alert(data?.message || 'Course deleted successfully!');
+    },
+    onSettled: () => {
+      setPendingDeleteId(null);
+      queryClient.invalidateQueries({ queryKey: ['courses'] });
+      setOpenDropdownId(null);
     }
   });
 
@@ -286,6 +311,10 @@ export default function CourseManagementPage() {
   };
 
   const handleDeleteCourse = (course: any) => {
+    if (deleteCourseMutation.isPending) {
+      return;
+    }
+
     const confirmed = window.confirm(
       `${t('confirmDeleteCourseSimple') || 'Delete this course?'}\n${course.title}`
     );
@@ -539,10 +568,24 @@ export default function CourseManagementPage() {
                               </button>
                               <button
                                 onClick={() => handleDeleteCourse(course)}
-                                className="flex w-full items-center gap-2 px-4 py-2 text-sm text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-500/10"
+                                disabled={deleteCourseMutation.isPending}
+                                className={`flex w-full items-center gap-2 px-4 py-2 text-sm ${
+                                  deleteCourseMutation.isPending
+                                    ? 'cursor-not-allowed text-red-400 opacity-60'
+                                    : 'text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-500/10'
+                                }`}
                               >
-                                <TrashIcon className="h-4 w-4" />
-                                {t('delete') || 'Delete'}
+                                {deleteCourseMutation.isPending && pendingDeleteId === course.id ? (
+                                  <>
+                                    <ArrowPathIcon className="h-4 w-4 animate-spin" />
+                                    {t('deleting') || 'Deleting...'}
+                                  </>
+                                ) : (
+                                  <>
+                                    <TrashIcon className="h-4 w-4" />
+                                    {t('delete') || 'Delete'}
+                                  </>
+                                )}
                               </button>
                             </div>
                           </div>

@@ -99,13 +99,14 @@ export async function deleteCourseHandler(req: AuthenticatedRequest, res: Respon
       return res.status(403).json({ message: 'Forbidden' });
     }
 
-    const course = await deleteCourse(courseId, req.user.locationId);
-    
+    const scopedLocationId = req.user.role === 'global_admin' ? undefined : req.user.locationId;
+    const course = await deleteCourse(courseId, req.user.organizationId, scopedLocationId);
+
     if (!course) {
       return res.status(404).json({ message: 'Course not found' });
     }
 
-    return res.json({ message: 'Course deleted successfully' });
+    return res.json({ message: 'Course deleted successfully', id: course.id });
   } catch (error) {
     return res.status(500).json({ message: 'Unable to delete course' });
   }
