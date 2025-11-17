@@ -270,11 +270,14 @@ export default function CourseManagementPage() {
   // Close dropdown when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      Object.values(dropdownRefs.current).forEach((ref) => {
-        if (ref && !ref.contains(event.target as Node)) {
-          setOpenDropdownId(null);
-        }
-      });
+      const target = event.target as Node;
+      const clickedInsideDropdown = Object.values(dropdownRefs.current).some((ref) =>
+        ref?.contains(target)
+      );
+
+      if (!clickedInsideDropdown) {
+        setOpenDropdownId(null);
+      }
     };
 
     document.addEventListener('mousedown', handleClickOutside);
