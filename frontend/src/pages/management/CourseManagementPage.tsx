@@ -1,4 +1,12 @@
-import { ArrowUpTrayIcon, EllipsisVerticalIcon, PlusIcon, TrashIcon, PencilIcon, PowerIcon } from '@heroicons/react/24/outline';
+import {
+  ArrowUpTrayIcon,
+  EllipsisVerticalIcon,
+  PlusIcon,
+  TrashIcon,
+  PencilIcon,
+  PowerIcon,
+  MagnifyingGlassIcon
+} from '@heroicons/react/24/outline';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState, useRef, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
@@ -79,15 +87,13 @@ export default function CourseManagementPage() {
   const queryClient = useQueryClient();
   const [isCreateOpen, setCreateOpen] = useState(false);
   const [isEditOpen, setEditOpen] = useState(false);
-  const [isDeleteOpen, setDeleteOpen] = useState(false);
   const [editingCourse, setEditingCourse] = useState<any>(null);
-  const [deletingCourse, setDeletingCourse] = useState<any>(null);
-  const [deleteConfirmId, setDeleteConfirmId] = useState<string>('');
   const [openDropdownId, setOpenDropdownId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'details' | 'rules' | 'quiz'>('details');
   const [fileName, setFileName] = useState<string>('');
   const [sortField, setSortField] = useState<string>('created_at');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
+  const [searchQuery, setSearchQuery] = useState('');
   const dropdownRefs = useRef<{ [key: string]: HTMLDivElement | null }>({});
   
   const { register, handleSubmit, reset, watch, setValue } = useForm<CourseForm>({
@@ -161,9 +167,6 @@ export default function CourseManagementPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['courses'] });
-      setDeleteOpen(false);
-      setDeletingCourse(null);
-      setDeleteConfirmId('');
       alert('Course deleted successfully!');
     },
     onError: (error: any) => {
@@ -282,25 +285,18 @@ export default function CourseManagementPage() {
     setEditOpen(true);
   };
 
-  const handleDeleteClick = (course: any) => {
-    setDeletingCourse(course);
-    setDeleteConfirmId('');
-    setOpenDropdownId(null);
-    setDeleteOpen(true);
-  };
+  const handleDeleteCourse = (course: any) => {
+    const confirmed = window.confirm(
+      `${t('confirmDeleteCourseSimple') || 'Delete this course?'}\n${course.title}`
+    );
 
-  const handleDeleteConfirm = () => {
-    if (!deletingCourse) return;
-    
-    const trimmedId = deleteConfirmId.trim();
-    const shortId = deletingCourse.id.substring(0, 8);
-
-    if (trimmedId !== deletingCourse.id && trimmedId !== shortId) {
-      alert(`Course ID does not match. Please type ${shortId} or the full ID to confirm.`);
+    if (!confirmed) {
+      setOpenDropdownId(null);
       return;
     }
 
-    deleteCourseMutation.mutate(deletingCourse.id);
+    deleteCourseMutation.mutate(course.id);
+    setOpenDropdownId(null);
   };
 
   const handleToggleCourseStatus = (course: any) => {
@@ -359,6 +355,26 @@ export default function CourseManagementPage() {
     }
   });
 
+  const normalizedQuery = searchQuery.trim().toLowerCase();
+  const filteredCourses = sortedCourses.filter((course: any) => {
+    if (!normalizedQuery) return true;
+
+    const tokens = [
+      course.title,
+      course.description,
+      course.course_number,
+      course.id,
+      Array.isArray(course.assigned_departments) ? course.assigned_departments.join(' ') : '',
+      Array.isArray(course.assigned_positions) ? course.assigned_positions.join(' ') : ''
+    ]
+      .filter(Boolean)
+      .map((value) => String(value).toLowerCase());
+
+    return tokens.some((token) => token.includes(normalizedQuery));
+  });
+
+  const hasSearch = normalizedQuery.length > 0;
+
   const questions = watch('questions') || createEmptyQuiz();
 
   return (
@@ -384,14 +400,27 @@ export default function CourseManagementPage() {
       </section>
 
       <section className="rounded-3xl border border-slate-100 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
             <h2 className="text-lg font-semibold text-slate-900 dark:text-white">{t('courseLibrary')}</h2>
             <p className="text-sm text-slate-500 dark:text-slate-300">{t('coursesScoped')}</p>
           </div>
-          <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-500 dark:bg-slate-800 dark:text-slate-300">
-            {courses.length} {t('coursesFound')}
-          </span>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
+            <div className="relative w-full sm:w-64">
+              <MagnifyingGlassIcon className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(event) => setSearchQuery(event.target.value)}
+                className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2 pl-9 pr-3 text-sm text-slate-900 outline-none transition focus:border-primary dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                placeholder={t('searchCoursesPlaceholder') || 'Search courses'}
+                aria-label={t('searchCourses') || 'Search courses'}
+              />
+            </div>
+            <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-500 dark:bg-slate-800 dark:text-slate-300">
+              {filteredCourses.length} / {courses.length} {t('coursesFound')}
+            </span>
+          </div>
         </div>
 
         <div className="mt-6 overflow-x-auto overflow-y-visible rounded-2xl border border-slate-100 dark:border-slate-800">
@@ -439,18 +468,18 @@ export default function CourseManagementPage() {
             <tbody className="divide-y divide-slate-100 bg-white dark:divide-slate-800 dark:bg-slate-900">
               {isLoading ? (
                 <tr>
-                  <td colSpan={7} className="px-6 py-12 text-center text-sm text-slate-500 dark:text-slate-400">
+                  <td colSpan={8} className="px-6 py-12 text-center text-sm text-slate-500 dark:text-slate-400">
                     Loading courses...
                   </td>
                 </tr>
-              ) : courses.length === 0 ? (
+              ) : filteredCourses.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-6 py-12 text-center text-sm text-slate-500 dark:text-slate-400">
-                    {t('uploadContentPublish')}
+                  <td colSpan={8} className="px-6 py-12 text-center text-sm text-slate-500 dark:text-slate-400">
+                    {hasSearch ? t('noCoursesMatchSearch') || 'No courses match your search.' : t('uploadContentPublish')}
                   </td>
                 </tr>
               ) : (
-                sortedCourses.map((course: any, index: number) => (
+                filteredCourses.map((course: any, index: number) => (
                   <tr key={course.id}>
                     <td className="px-6 py-4 text-sm font-semibold text-slate-900 dark:text-white">
                       {index + 1}
@@ -480,7 +509,7 @@ export default function CourseManagementPage() {
                             : 'bg-red-100 text-red-600 dark:bg-red-500/10 dark:text-red-200'
                         }`}
                       >
-                        {course.is_active ? (t('active') || 'Active') : (t('inactive') || 'Inactive')}
+                        {course.is_active ? (t('active') || 'Active') : (t('deactivatedStatus') || 'Deactivated')}
                       </span>
                     </td>
                     <td className="px-6 py-4">
@@ -509,7 +538,7 @@ export default function CourseManagementPage() {
                                 {course.is_active ? (t('deactivate') || 'Deactivate') : (t('reactivate') || 'Reactivate')}
                               </button>
                               <button
-                                onClick={() => handleDeleteClick(course)}
+                                onClick={() => handleDeleteCourse(course)}
                                 className="flex w-full items-center gap-2 px-4 py-2 text-sm text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-500/10"
                               >
                                 <TrashIcon className="h-4 w-4" />
@@ -1232,69 +1261,6 @@ export default function CourseManagementPage() {
       </Modal>
 
       {/* Delete Confirmation Modal */}
-      <Modal
-        open={isDeleteOpen}
-        onClose={() => {
-          setDeleteOpen(false);
-          setDeletingCourse(null);
-          setDeleteConfirmId('');
-        }}
-        title={t('deleteCourse') || 'Delete Course'}
-        description={t('confirmDeleteCourse') || 'This action cannot be undone. Please type the course ID to confirm.'}
-      >
-        <div className="space-y-4">
-          {deletingCourse && (
-            <div className="rounded-xl border border-red-200 bg-red-50 p-4 dark:border-red-500/40 dark:bg-red-500/10">
-              <p className="text-sm font-semibold text-red-700 dark:text-red-200">
-                {t('courseToDelete') || 'Course to delete:'}
-              </p>
-              <p className="mt-1 text-sm text-red-600 dark:text-red-300">
-                {deletingCourse.title} ({deletingCourse.id.substring(0, 8)})
-              </p>
-            </div>
-          )}
-          
-          <div>
-            <label className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-200">
-              {t('typeCourseId') || 'Type the course ID (or first 8 characters) to confirm:'}
-            </label>
-            <input
-              type="text"
-              value={deleteConfirmId}
-              onChange={(e) => setDeleteConfirmId(e.target.value)}
-              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none focus:border-red-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
-              placeholder={deletingCourse ? deletingCourse.id.substring(0, 8) : 'Course ID'}
-            />
-            {deletingCourse && (
-              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                Hint: {deletingCourse.id} ({deletingCourse.id.substring(0, 8)})
-              </p>
-            )}
-          </div>
-
-          <div className="flex items-center justify-end gap-3 border-t border-slate-200 pt-4 dark:border-slate-700">
-            <button
-              type="button"
-              onClick={() => {
-                setDeleteOpen(false);
-                setDeletingCourse(null);
-                setDeleteConfirmId('');
-              }}
-              className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-300"
-            >
-              {t('cancel')}
-            </button>
-            <button
-              type="button"
-              onClick={handleDeleteConfirm}
-              disabled={deleteCourseMutation.isPending}
-              className="rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-red-700 disabled:opacity-50"
-            >
-              {deleteCourseMutation.isPending ? (t('deleting') || 'Deleting...') : (t('delete') || 'Delete')}
-            </button>
-          </div>
-        </div>
-      </Modal>
     </div>
   );
 }
