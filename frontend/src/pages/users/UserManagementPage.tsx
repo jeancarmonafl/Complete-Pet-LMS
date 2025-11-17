@@ -1,4 +1,5 @@
 import { ArrowDownTrayIcon, DocumentArrowUpIcon, DocumentMagnifyingGlassIcon, EllipsisVerticalIcon, InformationCircleIcon, PencilSquareIcon, PlusIcon, PowerIcon } from '@heroicons/react/24/outline';
+import type { AxiosError } from 'axios';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { useForm } from 'react-hook-form';
@@ -104,8 +105,20 @@ export default function UserManagementPage() {
 
   const toggleUserStatusMutation = useMutation({
     mutationFn: async ({ id, isActive }: { id: string; isActive: boolean }) => {
-      const response = await api.patch(`/users/${id}/status`, { isActive });
-      return response.data;
+      try {
+        const response = await api.patch(`/users/${id}/status`, { isActive });
+        return response.data;
+      } catch (error) {
+        const axiosError = error as AxiosError;
+        const statusCode = axiosError.response?.status;
+
+        if (statusCode && [404, 405, 501].includes(statusCode)) {
+          const response = await api.put(`/users/${id}`, { isActive });
+          return response.data;
+        }
+
+        throw error;
+      }
     },
     onMutate: async (variables) => {
       await queryClient.cancelQueries({ queryKey: ['users'] });
@@ -167,18 +180,19 @@ export default function UserManagementPage() {
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      Object.values(actionMenuRefs.current).forEach((ref) => {
-        if (ref && !ref.contains(event.target as Node)) {
-          setOpenActionMenuId(null);
-        }
-      });
+      if (!openActionMenuId) return;
+
+      const currentMenu = actionMenuRefs.current[openActionMenuId];
+      if (currentMenu && !currentMenu.contains(event.target as Node)) {
+        setOpenActionMenuId(null);
+      }
     };
 
     document.addEventListener('mousedown', handleClickOutside);
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
-  }, []);
+  }, [openActionMenuId]);
 
   const handleInvite = (data: InviteForm) => {
     createUserMutation.mutate({
