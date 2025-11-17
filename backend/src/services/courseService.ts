@@ -119,11 +119,25 @@ export async function updateCourse(courseId: string, locationId: string, updates
   return result.rows[0];
 }
 
-export async function deleteCourse(courseId: string, locationId: string) {
-  const result = await pool.query(
-    `DELETE FROM courses WHERE id = $1 AND location_id = $2 RETURNING *`,
-    [courseId, locationId]
-  );
+export async function deleteCourse(
+  courseId: string,
+  organizationId: string,
+  locationId?: string
+) {
+  const values: string[] = [courseId, organizationId];
+  let query = `
+    DELETE FROM courses
+    WHERE id = $1 AND organization_id = $2
+  `;
+
+  if (locationId) {
+    values.push(locationId);
+    query += ` AND location_id = $${values.length}`;
+  }
+
+  query += ' RETURNING *';
+
+  const result = await pool.query(query, values);
   return result.rows[0];
 }
 

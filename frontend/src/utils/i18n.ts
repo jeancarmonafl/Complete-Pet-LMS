@@ -150,7 +150,11 @@ const resources = {
       courseLibrary: 'Course Library',
       coursesScoped: 'All courses scoped to the selected location.',
       coursesFound: 'courses found',
+      searchCourses: 'Search courses',
+      searchCoursesPlaceholder: 'Search by title, description, department, or position',
+      noCoursesMatchSearch: 'No courses match your search.',
       uploadContentPublish: 'Upload content and publish courses to see them listed here.',
+      confirmDeleteCourseSimple: 'Delete this course?',
       
       // Create Course Modal
       createNewCourse: 'Create New Course',
@@ -221,6 +225,7 @@ const resources = {
       light: 'Light',
       dark: 'Dark',
       inactive: 'Inactive',
+      deactivatedStatus: 'Deactivated',
       update: 'Update',
       deactivate: 'Deactivate',
       reactivate: 'Reactivate',
@@ -381,7 +386,11 @@ const resources = {
       courseLibrary: 'Biblioteca de cursos',
       coursesScoped: 'Todos los cursos para la ubicación seleccionada.',
       coursesFound: 'cursos encontrados',
+      searchCourses: 'Buscar cursos',
+      searchCoursesPlaceholder: 'Busca por título, descripción, departamento o puesto',
+      noCoursesMatchSearch: 'Ningún curso coincide con tu búsqueda.',
       uploadContentPublish: 'Carga contenido y publica cursos para verlos listados aquí.',
+      confirmDeleteCourseSimple: '¿Eliminar este curso?',
       
       // Create Course Modal
       createNewCourse: 'Crear nuevo curso',
@@ -452,6 +461,7 @@ const resources = {
       light: 'Claro',
       dark: 'Oscuro',
       inactive: 'Inactivo',
+      deactivatedStatus: 'Desactivado',
       update: 'Actualizar',
       deactivate: 'Desactivar',
       reactivate: 'Reactivar',
