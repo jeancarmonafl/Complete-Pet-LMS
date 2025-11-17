@@ -271,11 +271,12 @@ export default function CourseManagementPage() {
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       const target = event.target as Node;
-      const clickedInsideDropdown = Object.values(dropdownRefs.current).some((ref) =>
+
+      const clickedInsideAnyDropdown = Object.values(dropdownRefs.current).some((ref) =>
         ref?.contains(target)
       );
 
-      if (!clickedInsideDropdown) {
+      if (!clickedInsideAnyDropdown) {
         setOpenDropdownId(null);
       }
     };
