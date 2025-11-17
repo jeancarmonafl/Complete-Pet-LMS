@@ -124,21 +124,49 @@ export async function deleteCourse(
   organizationId: string,
   locationId?: string
 ) {
-  const values: string[] = [courseId, organizationId];
-  let query = `
-    DELETE FROM courses
-    WHERE id = $1 AND organization_id = $2
-  `;
+  const client = await pool.connect();
 
-  if (locationId) {
-    values.push(locationId);
-    query += ` AND location_id = $${values.length}`;
+  try {
+    await client.query('BEGIN');
+
+    const filters: string[] = [courseId, organizationId];
+    let condition = 'id = $1 AND organization_id = $2';
+
+    if (locationId) {
+      filters.push(locationId);
+      condition += ` AND location_id = $${filters.length}`;
+    }
+
+    const courseResult = await client.query(
+      `SELECT id FROM courses WHERE ${condition} FOR UPDATE`,
+      filters
+    );
+
+    if (courseResult.rowCount === 0) {
+      await client.query('ROLLBACK');
+      return null;
+    }
+
+    const { id: scopedCourseId } = courseResult.rows[0];
+
+    await client.query('DELETE FROM quiz_attempts WHERE course_id = $1', [scopedCourseId]);
+    await client.query('DELETE FROM training_records WHERE course_id = $1', [scopedCourseId]);
+    await client.query('DELETE FROM enrollments WHERE course_id = $1', [scopedCourseId]);
+    await client.query('DELETE FROM quizzes WHERE course_id = $1', [scopedCourseId]);
+
+    const deleteResult = await client.query(
+      'DELETE FROM courses WHERE id = $1 RETURNING *',
+      [scopedCourseId]
+    );
+
+    await client.query('COMMIT');
+    return deleteResult.rows[0];
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
   }
-
-  query += ' RETURNING *';
-
-  const result = await pool.query(query, values);
-  return result.rows[0];
 }
 
 export async function updateCourseStatus(courseId: string, locationId: string, isActive: boolean) {
