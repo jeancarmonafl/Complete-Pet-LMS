@@ -15,6 +15,10 @@ const createUserSchema = z.object({
   password: z.string().min(8).optional()
 });
 
+const updateUserSchema = createUserSchema.partial().extend({
+  isActive: z.boolean().optional()
+});
+
 const userStatusSchema = z.object({
   isActive: z.boolean()
 });
@@ -88,7 +92,7 @@ export async function updateUserHandler(req: AuthenticatedRequest, res: Response
 
   try {
     const userId = req.params.id;
-    const body = createUserSchema.partial().parse(req.body);
+    const body = updateUserSchema.parse(req.body);
 
     if (!['global_admin', 'admin'].includes(req.user.role)) {
       return res.status(403).json({ message: 'Forbidden' });
