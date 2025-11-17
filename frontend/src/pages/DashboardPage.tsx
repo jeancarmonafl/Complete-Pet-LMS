@@ -1,6 +1,6 @@
 import { AcademicCapIcon, BookOpenIcon, ChartBarIcon, ClockIcon, UserGroupIcon, UsersIcon } from '@heroicons/react/24/outline';
 import { useQuery } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 
@@ -31,6 +31,7 @@ interface UserActivityResponse {
 export default function DashboardPage() {
   const { t } = useTranslation();
   const user = useAuthStore((state) => state.user);
+  const userId = user?.id;
   const [selectedApproval, setSelectedApproval] = useState<TrainingRecord | null>(null);
   const [isApprovalModalOpen, setApprovalModalOpen] = useState(false);
   const { approvalsQueue, approveTraining } = useTrainingStore();
@@ -40,20 +41,24 @@ export default function DashboardPage() {
     isLoading: isAssignmentsLoading,
     isError: isAssignmentsError
   } = useQuery<UserActivityResponse>({
-    queryKey: ['dashboardAssignments', user?.id],
-    queryFn: async () => {
-      if (!user?.id) {
+    queryKey: ['dashboardAssignments', userId],
+    queryFn: async ({ queryKey }) => {
+      const [, requestedUserId] = queryKey;
+      if (!requestedUserId) {
         throw new Error('Missing user identifier');
       }
-      const response = await api.get(`/users/${user.id}/activity`);
+      const response = await api.get(`/users/${requestedUserId}/activity`);
       return response.data;
     },
-    enabled: Boolean(user?.id),
+    enabled: Boolean(userId),
     staleTime: 5 * 60 * 1000
   });
 
-  const pendingAssignments = (userAssignments?.activity ?? []).filter(
-    (record) => record.status?.toLowerCase() !== 'completed'
+  const normalizeStatus = (status?: string | null) => status?.trim().toLowerCase() ?? '';
+
+  const pendingAssignments = useMemo(
+    () => (userAssignments?.activity ?? []).filter((record) => normalizeStatus(record.status) !== 'completed'),
+    [userAssignments]
   );
 
   const formatStatusLabel = (status?: string | null) => {
@@ -61,6 +66,7 @@ export default function DashboardPage() {
       return t('unknownStatus') || 'Unknown';
     }
     return status
+      .trim()
       .split('_')
       .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
       .join(' ');
