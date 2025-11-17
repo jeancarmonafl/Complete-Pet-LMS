@@ -204,13 +204,14 @@ export async function resetPassword(userId: string, locationId: string, newPassw
   );
 }
 
-export async function getUserActivity(userId: string, locationId: string) {
+export async function getUserActivity(userId: string, locationId?: string) {
   const client = await pool.connect();
 
   try {
+    const filterByLocation = Boolean(locationId);
     const userResult = await client.query(
       `
-        SELECT 
+        SELECT
           id,
           full_name,
           employee_id,
@@ -221,9 +222,10 @@ export async function getUserActivity(userId: string, locationId: string) {
           created_at,
           is_active
         FROM users
-        WHERE id = $1 AND location_id = $2
+        WHERE id = $1
+        ${filterByLocation ? 'AND location_id = $2' : ''}
       `,
-      [userId, locationId]
+      filterByLocation ? [userId, locationId] : [userId]
     );
 
     if (userResult.rows.length === 0) {

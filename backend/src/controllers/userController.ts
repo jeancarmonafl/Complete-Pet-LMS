@@ -150,12 +150,15 @@ export async function getUserActivityHandler(req: AuthenticatedRequest, res: Res
 
   try {
     const userId = req.params.id;
+    const isAdmin = ['global_admin', 'admin'].includes(req.user.role);
+    const isManagerOrSupervisor = ['manager', 'supervisor'].includes(req.user.role);
+    const isSelfRequest = req.user.id === userId;
 
-    if (!['global_admin', 'admin', 'manager', 'supervisor'].includes(req.user.role)) {
+    if (!isAdmin && !isManagerOrSupervisor && !isSelfRequest) {
       return res.status(403).json({ message: 'Forbidden' });
     }
 
-    const activity = await getUserActivity(userId, req.user.locationId);
+    const activity = await getUserActivity(userId, isAdmin ? undefined : req.user.locationId);
 
     if (!activity) {
       return res.status(404).json({ message: 'User not found' });
