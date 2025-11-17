@@ -1,21 +1,69 @@
 import { AcademicCapIcon, BookOpenIcon, ChartBarIcon, ClockIcon, UserGroupIcon, UsersIcon } from '@heroicons/react/24/outline';
+import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 
-import { TrainingFlowModal } from '../components/TrainingFlowModal';
 import { SupervisorApprovalModal } from '../components/SupervisorApprovalModal';
 import { useAuthStore } from '../contexts/useAuthStore';
-import { useTrainingStore, TrainingAssignment, TrainingRecord } from '../contexts/useTrainingStore';
+import { useTrainingStore, TrainingRecord } from '../contexts/useTrainingStore';
+import api from '../services/apiClient';
+
+interface ActivityRecord {
+  id: string;
+  course_title: string;
+  content_type: string;
+  status: string;
+  progress_percentage: number | null;
+  deadline: string | null;
+  started_date: string | null;
+  completed_date: string | null;
+  quiz_score: number | null;
+  approval_status: string | null;
+  supervisor_signature_date: string | null;
+}
+
+interface UserActivityResponse {
+  activity: ActivityRecord[];
+}
 
 export default function DashboardPage() {
   const { t } = useTranslation();
   const user = useAuthStore((state) => state.user);
-  const [selectedTraining, setSelectedTraining] = useState<TrainingAssignment | null>(null);
-  const [isTrainingModalOpen, setTrainingModalOpen] = useState(false);
   const [selectedApproval, setSelectedApproval] = useState<TrainingRecord | null>(null);
   const [isApprovalModalOpen, setApprovalModalOpen] = useState(false);
-  const { pendingTrainings, approvalsQueue, completeTraining, approveTraining } = useTrainingStore();
+  const { approvalsQueue, approveTraining } = useTrainingStore();
+
+  const {
+    data: userAssignments,
+    isLoading: isAssignmentsLoading,
+    isError: isAssignmentsError
+  } = useQuery<UserActivityResponse>({
+    queryKey: ['dashboardAssignments', user?.id],
+    queryFn: async () => {
+      if (!user?.id) {
+        throw new Error('Missing user identifier');
+      }
+      const response = await api.get(`/users/${user.id}/activity`);
+      return response.data;
+    },
+    enabled: Boolean(user?.id),
+    staleTime: 5 * 60 * 1000
+  });
+
+  const pendingAssignments = (userAssignments?.activity ?? []).filter(
+    (record) => record.status?.toLowerCase() !== 'completed'
+  );
+
+  const formatStatusLabel = (status?: string | null) => {
+    if (!status) {
+      return t('unknownStatus') || 'Unknown';
+    }
+    return status
+      .split('_')
+      .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
+      .join(' ');
+  };
 
   const cards = [
     { 
@@ -53,34 +101,6 @@ export default function DashboardPage() {
       icon: ClockIcon
     }
   ];
-
-  const handleStartTraining = (training: TrainingAssignment) => {
-    setSelectedTraining(training);
-    setTrainingModalOpen(true);
-  };
-
-  const handleTrainingCompletion = ({ quizScore, signature }: { quizScore: number; signature: string }) => {
-    if (!selectedTraining) return;
-
-    const employeeId = user?.id ? `EMP-${user.id.substring(0, 4).toUpperCase()}` : 'EMP000';
-
-    completeTraining(selectedTraining.id, {
-      assignmentId: selectedTraining.id,
-      courseId: selectedTraining.courseId,
-      courseTitle: selectedTraining.title,
-      completionDate: new Date().toISOString(),
-      quizScore,
-      passPercentage: selectedTraining.passPercentage,
-      employeeId,
-      employeeName: user?.fullName || 'Team Member',
-      employeeSignature: signature,
-      contentType: selectedTraining.contentType,
-      durationMinutes: selectedTraining.durationMinutes
-    });
-
-    setSelectedTraining(null);
-    setTrainingModalOpen(false);
-  };
 
   const handleOpenApproval = (record: TrainingRecord) => {
     setSelectedApproval(record);
@@ -142,29 +162,42 @@ export default function DashboardPage() {
             </div>
           </div>
           <div className="mt-4 space-y-3">
-            {pendingTrainings.length === 0 ? (
+            {isAssignmentsLoading ? (
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600 dark:border-slate-700 dark:bg-slate-800/40 dark:text-slate-300">
+                {t('loading') || 'Loading...'}
+              </div>
+            ) : isAssignmentsError ? (
+              <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700 dark:border-red-500/40 dark:bg-red-500/10 dark:text-red-200">
+                {t('unableToLoadTrainings') || 'Unable to load trainings right now.'}
+              </div>
+            ) : pendingAssignments.length === 0 ? (
               <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700 dark:border-emerald-500/40 dark:bg-emerald-500/10 dark:text-emerald-200">
                 {t('allTrainingsCurrent') || 'All trainings are up to date.'}
               </div>
             ) : (
-              pendingTrainings.map((training) => (
+              pendingAssignments.map((assignment) => (
                 <div
-                  key={training.id}
-                  className="flex flex-col gap-2 rounded-xl border border-slate-200 p-4 text-sm dark:border-slate-700 sm:flex-row sm:items-center sm:justify-between"
+                  key={assignment.id}
+                  className="flex flex-col gap-3 rounded-xl border border-slate-200 p-4 text-sm dark:border-slate-700 sm:flex-row sm:items-center sm:justify-between"
                 >
                   <div>
-                    <p className="font-semibold text-slate-900 dark:text-white">{training.title}</p>
+                    <p className="font-semibold text-slate-900 dark:text-white">{assignment.course_title}</p>
                     <p className="text-xs text-slate-500 dark:text-slate-400">
-                      Due {new Date(training.dueDate).toLocaleDateString()} · {training.durationMinutes} min ·{' '}
-                      {training.passPercentage}% pass
+                      {assignment.deadline
+                        ? `${t('due') || 'Due'} ${new Date(assignment.deadline).toLocaleDateString()}`
+                        : t('noDeadline') || 'No deadline'}
+                      {' · '}
+                      {(assignment.content_type || '—').toUpperCase()}
                     </p>
                   </div>
-                  <button
-                    onClick={() => handleStartTraining(training)}
-                    className="rounded-xl bg-primary px-3 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-primary/90"
-                  >
-                    {t('startTraining') || 'Start Training'}
-                  </button>
+                  <div className="flex flex-wrap items-center gap-2 text-xs">
+                    <span className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-0.5 font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200">
+                      {formatStatusLabel(assignment.status)}
+                    </span>
+                    <span className="text-slate-500 dark:text-slate-300">
+                      {Math.round(assignment.progress_percentage ?? 0)}% {t('complete') || 'complete'}
+                    </span>
+                  </div>
                 </div>
               ))
             )}
@@ -268,16 +301,6 @@ export default function DashboardPage() {
           </section>
         </div>
       </div>
-
-      <TrainingFlowModal
-        open={isTrainingModalOpen}
-        training={selectedTraining}
-        onClose={() => {
-          setTrainingModalOpen(false);
-          setSelectedTraining(null);
-        }}
-        onComplete={handleTrainingCompletion}
-      />
 
       <SupervisorApprovalModal
         open={isApprovalModalOpen}
