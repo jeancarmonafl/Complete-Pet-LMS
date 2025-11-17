@@ -1,12 +1,43 @@
-import bcrypt from 'bcrypt';
+import bcrypt from 'bcryptjs';
 import { webcrypto } from 'node:crypto';
 
 import env from '../config/env.js';
 
 const crypto = globalThis.crypto ?? webcrypto;
 
+function hashWithBcrypt(password: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    bcrypt.hash(password, env.PASSWORD_SALT_ROUNDS, (error: Error | null, hashed?: string) => {
+      if (error) {
+        reject(error);
+        return;
+      }
+
+      if (!hashed) {
+        reject(new Error('Failed to hash password'));
+        return;
+      }
+
+      resolve(hashed);
+    });
+  });
+}
+
+function compareWithBcrypt(password: string, hash: string): Promise<boolean> {
+  return new Promise((resolve, reject) => {
+    bcrypt.compare(password, hash, (error: Error | null, result?: boolean) => {
+      if (error) {
+        reject(error);
+        return;
+      }
+
+      resolve(result ?? false);
+    });
+  });
+}
+
 export async function hashPassword(password: string): Promise<string> {
-  return bcrypt.hash(password, env.PASSWORD_SALT_ROUNDS);
+  return hashWithBcrypt(password);
 }
 
 export async function verifyPassword(password: string, hash: string): Promise<boolean> {
@@ -15,7 +46,7 @@ export async function verifyPassword(password: string, hash: string): Promise<bo
   }
 
   try {
-    return await bcrypt.compare(password, hash);
+    return await compareWithBcrypt(password, hash);
   } catch (error) {
     return password === hash;
   }

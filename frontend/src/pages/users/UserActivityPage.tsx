@@ -7,6 +7,7 @@ import api from '../../services/apiClient';
 
 interface ActivityRecord {
   id: string;
+  course_id?: string;
   course_title: string;
   content_type: string;
   status: string;
