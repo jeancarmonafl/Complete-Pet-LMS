@@ -157,9 +157,13 @@ export async function getUserActivityHandler(req: AuthenticatedRequest, res: Res
       return res.status(403).json({ message: 'Forbidden' });
     }
 
+    // Only filter by location when viewing OTHER users' data and not a global/admin
+    // When viewing your own data, no location filter should be applied
+    const shouldFilterByLocation = !isSelfRequest && !['global_admin', 'admin'].includes(req.user.role);
+    
     const activity = await getUserActivity(
       userId,
-      ['global_admin', 'admin'].includes(req.user.role) ? undefined : req.user.locationId
+      shouldFilterByLocation ? req.user.locationId : undefined
     );
 
     if (!activity) {
