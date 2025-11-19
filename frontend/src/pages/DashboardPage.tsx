@@ -26,7 +26,10 @@ interface ActivityRecord {
   course_id?: string;
   course_title: string;
   content_type: string;
-  status: string;
+  content_url?: string | null;
+  duration_minutes?: number | null;
+  pass_percentage?: number | null;
+  status?: string | null;
   progress_percentage: number | null;
   deadline: string | null;
   started_date: string | null;
@@ -106,8 +109,11 @@ const convertActivityToTrainingAssignment = (
     courseId: record.course_id ?? record.id,
     title: record.course_title,
     contentType: mapContentType(record.content_type),
-    durationMinutes: DEFAULT_TRAINING_DURATION_MINUTES,
-    passPercentage: DEFAULT_TRAINING_PASS_PERCENTAGE,
+    contentUrl: record.content_url ?? null,
+    durationMinutes:
+      record.duration_minutes ?? DEFAULT_TRAINING_DURATION_MINUTES,
+    passPercentage:
+      record.pass_percentage ?? DEFAULT_TRAINING_PASS_PERCENTAGE,
     assignedDate: record.started_date ?? nowIso,
     dueDate: record.deadline ?? defaultDueDate,
     quiz: generateDefaultQuiz(record.course_title),

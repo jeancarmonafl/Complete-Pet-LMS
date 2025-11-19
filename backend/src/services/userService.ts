@@ -10,6 +10,9 @@ interface CourseAssignmentRuleRow {
   id: string;
   title: string;
   content_type: string;
+  content_url: string | null;
+  duration_minutes: number | null;
+  pass_percentage: number | null;
   assigned_departments: string[] | null;
   assigned_positions: string[] | null;
   assign_to_entire_company: boolean;
@@ -21,6 +24,9 @@ interface ActivityRow {
   course_id: string;
   course_title: string;
   content_type: string;
+  content_url: string | null;
+  duration_minutes: number | null;
+  pass_percentage: number | null;
   status: string | null;
   progress_percentage: number | null;
   deadline: string | null;
@@ -344,6 +350,9 @@ export async function getUserActivity(userId: string, locationId?: string) {
           e.course_id,
           c.title AS course_title,
           c.content_type,
+          c.content_url,
+          c.duration_minutes,
+          c.pass_percentage,
           e.status,
           e.progress_percentage,
           e.deadline,
@@ -367,6 +376,9 @@ export async function getUserActivity(userId: string, locationId?: string) {
           id,
           title,
           content_type,
+          content_url,
+          duration_minutes,
+          pass_percentage,
           assigned_departments,
           assigned_positions,
           assign_to_entire_company,
@@ -391,6 +403,9 @@ export async function getUserActivity(userId: string, locationId?: string) {
         course_id: course.id,
         course_title: course.title,
         content_type: course.content_type,
+        content_url: course.content_url,
+        duration_minutes: course.duration_minutes,
+        pass_percentage: course.pass_percentage,
         status: 'not_started',
         progress_percentage: 0,
         deadline: null,

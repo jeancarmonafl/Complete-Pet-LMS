@@ -13,6 +13,7 @@ export interface TrainingAssignment {
   courseId: string;
   title: string;
   contentType: ContentType;
+  contentUrl?: string | null;
   durationMinutes: number;
   passPercentage: number;
   assignedDate: string;
@@ -59,6 +60,7 @@ const defaultAssignments: TrainingAssignment[] = [
     courseId: "SOP-101",
     title: "SOP-101 Animal Handling",
     contentType: "video",
+    contentUrl: null,
     durationMinutes: 35,
     passPercentage: 80,
     assignedDate: new Date().toISOString(),
@@ -91,6 +93,7 @@ const defaultAssignments: TrainingAssignment[] = [
     courseId: "SOP-102",
     title: "SOP-102 Safety Orientation",
     contentType: "pdf",
+    contentUrl: null,
     durationMinutes: 20,
     passPercentage: 80,
     assignedDate: new Date().toISOString(),

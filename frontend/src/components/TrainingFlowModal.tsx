@@ -23,9 +23,11 @@ export function TrainingFlowModal({
   const [quizScore, setQuizScore] = useState<number | null>(null);
   const [quizSubmitted, setQuizSubmitted] = useState(false);
   const [quizError, setQuizError] = useState<string | null>(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [signatureDataUrl, setSignatureDataUrl] = useState('');
   const [isDrawing, setIsDrawing] = useState(false);
+  const [videoError, setVideoError] = useState<string | null>(null);
 
   const prepareCanvas = useCallback(() => {
     const canvas = canvasRef.current;
@@ -116,6 +118,43 @@ export function TrainingFlowModal({
     prepareCanvas();
   }, [prepareCanvas]);
 
+  const handleVideoLoadedMetadata = () => {
+    setVideoError(null);
+  };
+
+  const handleVideoTimeUpdate = () => {
+    const element = videoRef.current;
+    if (!element || !element.duration || Number.isNaN(element.duration)) {
+      return;
+    }
+
+    const progress = Math.min(
+      100,
+      Math.round((element.currentTime / element.duration) * 100)
+    );
+    setContentProgress(progress);
+
+    if (progress >= 99) {
+      setContentComplete(true);
+    }
+  };
+
+  const handleVideoEnded = () => {
+    setContentProgress(100);
+    setContentComplete(true);
+  };
+
+  const handleVideoError = () => {
+    setVideoError(
+      "Unable to load the training video. Please try again or contact your administrator."
+    );
+  };
+
+  const handleMarkContentReviewed = () => {
+    setContentProgress(100);
+    setContentComplete(true);
+  };
+
   useEffect(() => {
     if (open && training) {
       setStep(0);
@@ -126,6 +165,15 @@ export function TrainingFlowModal({
       setQuizSubmitted(false);
       setSignatureDataUrl('');
       setQuizError(null);
+      setVideoError(null);
+      if (videoRef.current) {
+        videoRef.current.pause();
+        try {
+          videoRef.current.currentTime = 0;
+        } catch {
+          // ignore seek issues
+        }
+      }
       requestAnimationFrame(() => prepareCanvas());
     }
   }, [open, training, prepareCanvas]);
@@ -136,7 +184,15 @@ export function TrainingFlowModal({
     setContentProgress(0);
     setContentComplete(false);
 
-    const durationMs = Math.min(training.durationMinutes, 5) * 1000;
+    const shouldSimulateProgress =
+      training.contentType !== "video" || !training.contentUrl;
+
+    if (!shouldSimulateProgress) {
+      return;
+    }
+
+    const durationMinutes = training.durationMinutes || 5;
+    const durationMs = Math.max(1, Math.min(durationMinutes, 5)) * 1000;
     const interval = 100;
     let elapsed = 0;
 
@@ -164,11 +220,6 @@ export function TrainingFlowModal({
       window.removeEventListener('resize', handleResize);
     };
   }, [open, prepareCanvas]);
-
-  const canAdvanceFromQuiz =
-    quizSubmitted &&
-    quizScore !== null &&
-    quizScore >= (training?.passPercentage ?? 80);
 
   const handleQuizSubmit = () => {
     if (!training) return;
@@ -219,45 +270,126 @@ export function TrainingFlowModal({
     return `${training.title} · ${training.contentType.toUpperCase()}`;
   }, [training]);
 
-  const renderContentStep = () => (
-    <div className="space-y-4">
-      <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-900/60">
-        <p className="text-sm font-semibold text-slate-900 dark:text-white">
-          {training?.contentType === "video"
-            ? "Watch the training video in full."
-            : training?.contentType === "pdf"
-            ? "Review the PDF presentation."
-            : "Review the training presentation."}
-        </p>
-        <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-          {training?.durationMinutes}{" "}
-          {`minute${(training?.durationMinutes || 0) > 1 ? "s" : ""}`} ·{" "}
-          {training?.passPercentage}% minimum passing score
-        </p>
-      </div>
+  const quizStepComplete =
+    quizSubmitted &&
+    quizScore !== null &&
+    quizScore >= (training?.passPercentage ?? 80);
 
-      <div>
-        <div className="mb-2 flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
-          <span>Progress</span>
-          <span>{contentProgress}%</span>
-        </div>
-        <div className="h-2 rounded-full bg-slate-200 dark:bg-slate-800">
-          <div
-            className={`h-2 rounded-full ${
-              contentComplete ? "bg-emerald-500" : "bg-primary"
-            }`}
-            style={{ width: `${contentProgress}%` }}
-          />
-        </div>
-        {!contentComplete && (
-          <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
-            Keep this window open. The next step unlocks after the content is
-            marked as viewed.
-          </p>
-        )}
-      </div>
-    </div>
+  const canAdvanceFromQuiz = quizStepComplete;
+
+  const completedSegments =
+    (contentComplete ? 1 : 0) +
+    (quizStepComplete ? 1 : 0) +
+    (signatureDataUrl ? 1 : 0);
+
+  const activeSegmentContribution =
+    !contentComplete ? (contentProgress / 100) * (100 / 3) : 0;
+
+  const overallProgress = Math.min(
+    100,
+    Math.round(completedSegments * (100 / 3) + activeSegmentContribution)
   );
+
+  const renderContentStep = () => {
+    const hasVideoContent =
+      training?.contentType === "video" && Boolean(training?.contentUrl);
+
+    return (
+      <div className="space-y-4">
+        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-900/60">
+          <p className="text-sm font-semibold text-slate-900 dark:text-white">
+            {hasVideoContent
+              ? "Watch the training video in full."
+              : training?.contentType === "pdf"
+              ? "Review the PDF presentation."
+              : training?.contentType === "powerpoint"
+              ? "Review the PowerPoint presentation."
+              : "Review the training presentation."}
+          </p>
+          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+            {training?.durationMinutes}{" "}
+            {`minute${(training?.durationMinutes || 0) > 1 ? "s" : ""}`} ·{" "}
+            {training?.passPercentage}% minimum passing score
+          </p>
+        </div>
+
+        {hasVideoContent ? (
+          <div className="space-y-2">
+            <div className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-900 dark:border-slate-700">
+              <video
+                ref={videoRef}
+                src={training?.contentUrl ?? undefined}
+                controls
+                controlsList="nodownload"
+                playsInline
+                className="h-64 w-full bg-black object-contain"
+                onLoadedMetadata={handleVideoLoadedMetadata}
+                onTimeUpdate={handleVideoTimeUpdate}
+                onEnded={handleVideoEnded}
+                onError={handleVideoError}
+              />
+            </div>
+            {videoError && (
+              <p className="text-xs font-semibold text-red-500">{videoError}</p>
+            )}
+          </div>
+        ) : (
+          <div className="rounded-2xl border border-dashed border-slate-300 bg-white/80 p-4 text-sm dark:border-slate-600 dark:bg-slate-900/40">
+            <p className="text-slate-600 dark:text-slate-300">
+              Open the training material and review it completely before
+              continuing.
+            </p>
+            {training?.contentUrl ? (
+              <a
+                href={training.contentUrl}
+                target="_blank"
+                rel="noreferrer noopener"
+                className="mt-3 inline-flex items-center text-sm font-semibold text-primary hover:text-primary/80"
+              >
+                Open training material
+              </a>
+            ) : (
+              <p className="mt-3 text-xs text-red-500">
+                No training file is attached to this course.
+              </p>
+            )}
+            <button
+              type="button"
+              onClick={handleMarkContentReviewed}
+              disabled={contentComplete}
+              className={`mt-4 inline-flex items-center justify-center rounded-xl px-3 py-2 text-xs font-semibold shadow-sm transition ${
+                contentComplete
+                  ? "cursor-not-allowed bg-slate-200 text-slate-500 dark:bg-slate-700 dark:text-slate-400"
+                  : "bg-primary text-white hover:bg-primary/90"
+              }`}
+            >
+              {contentComplete ? "Content reviewed" : "Mark content as reviewed"}
+            </button>
+          </div>
+        )}
+
+        <div>
+          <div className="mb-2 flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
+            <span>Step progress</span>
+            <span>{contentProgress}%</span>
+          </div>
+          <div className="h-2 rounded-full bg-slate-200 dark:bg-slate-800">
+            <div
+              className={`h-2 rounded-full ${
+                contentComplete ? "bg-emerald-500" : "bg-primary"
+              }`}
+              style={{ width: `${contentProgress}%` }}
+            />
+          </div>
+          {!contentComplete && (
+            <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+              Finish this step to unlock the quiz.
+            </p>
+          )}
+        </div>
+      </div>
+    );
+  };
 
   const renderQuizStep = () => (
     <div className="space-y-4">
@@ -409,6 +541,18 @@ export function TrainingFlowModal({
           <span className={step === 2 ? "text-primary" : "text-slate-400"}>
             3 · Signature
           </span>
+        </div>
+        <div className="mt-4">
+          <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
+            <span>Overall progress</span>
+            <span>{overallProgress}% complete</span>
+          </div>
+          <div className="mt-1 h-2 rounded-full bg-slate-200 dark:bg-slate-800">
+            <div
+              className="h-2 rounded-full bg-primary transition-all"
+              style={{ width: `${overallProgress}%` }}
+            />
+          </div>
         </div>
       </div>
       <div className="space-y-6">{renderStep()}</div>
