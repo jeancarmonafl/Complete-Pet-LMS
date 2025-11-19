@@ -5,8 +5,9 @@ import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 
 import { SupervisorApprovalModal } from '../components/SupervisorApprovalModal';
+import { TrainingFlowModal } from '../components/TrainingFlowModal';
 import { useAuthStore } from '../contexts/useAuthStore';
-import { useTrainingStore, TrainingRecord } from '../contexts/useTrainingStore';
+import { useTrainingStore, TrainingRecord, TrainingAssignment } from '../contexts/useTrainingStore';
 import api from '../services/apiClient';
 
 interface ActivityRecord {
@@ -28,12 +29,81 @@ interface UserActivityResponse {
   activity: ActivityRecord[];
 }
 
+const DEFAULT_TRAINING_DURATION_MINUTES = 30;
+const DEFAULT_TRAINING_PASS_PERCENTAGE = 80;
+
+const mapContentType = (type?: string | null): TrainingAssignment['contentType'] => {
+  switch ((type || '').trim().toLowerCase()) {
+    case 'pdf':
+      return 'pdf';
+    case 'powerpoint':
+    case 'ppt':
+      return 'powerpoint';
+    default:
+      return 'video';
+  }
+};
+
+const generateDefaultQuiz = (title: string) => {
+  const safeTitle = title || 'this training';
+  return [
+    {
+      question: `What is the primary goal of ${safeTitle}?`,
+      answers: [
+        `Understand the requirements of ${safeTitle}`,
+        'Memorize every policy verbatim',
+        'Skip all safety steps',
+        'Only complete the quiz portion'
+      ],
+      correctAnswerIndex: 0
+    },
+    {
+      question: `Which action best demonstrates completion of ${safeTitle}?`,
+      answers: [
+        'Apply the guidance in daily work',
+        'Share credentials with teammates',
+        'Ignore the course instructions',
+        'Delay reviewing the material'
+      ],
+      correctAnswerIndex: 0
+    },
+    {
+      question: 'When should you ask for supervisor support?',
+      answers: [
+        'Whenever a procedure is unclear',
+        'Only after an incident happens',
+        'Never, rely on memory',
+        'Only during annual reviews'
+      ],
+      correctAnswerIndex: 0
+    }
+  ];
+};
+
+const convertActivityToTrainingAssignment = (record: ActivityRecord): TrainingAssignment => {
+  const nowIso = new Date().toISOString();
+  const defaultDueDate = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+
+  return {
+    id: record.id,
+    courseId: record.course_id ?? record.id,
+    title: record.course_title,
+    contentType: mapContentType(record.content_type),
+    durationMinutes: DEFAULT_TRAINING_DURATION_MINUTES,
+    passPercentage: DEFAULT_TRAINING_PASS_PERCENTAGE,
+    assignedDate: record.started_date ?? nowIso,
+    dueDate: record.deadline ?? defaultDueDate,
+    quiz: generateDefaultQuiz(record.course_title)
+  };
+};
+
 export default function DashboardPage() {
   const { t } = useTranslation();
   const user = useAuthStore((state) => state.user);
   const userId = user?.id;
   const [selectedApproval, setSelectedApproval] = useState<TrainingRecord | null>(null);
   const [isApprovalModalOpen, setApprovalModalOpen] = useState(false);
+  const [activeTraining, setActiveTraining] = useState<TrainingAssignment | null>(null);
   const { approvalsQueue, approveTraining } = useTrainingStore();
 
   const {
@@ -126,6 +196,25 @@ export default function DashboardPage() {
     setApprovalModalOpen(false);
   };
 
+  const handleStartTraining = (record: ActivityRecord) => {
+    const training = convertActivityToTrainingAssignment(record);
+    setActiveTraining(training);
+  };
+
+  const handleTrainingModalClose = () => {
+    setActiveTraining(null);
+  };
+
+  const handleTrainingComplete = (result: { quizScore: number; signature: string }) => {
+    if (!activeTraining) return;
+    console.info('Training complete', {
+      trainingId: activeTraining.id,
+      quizScore: result.quizScore,
+      signatureProvided: Boolean(result.signature)
+    });
+    setActiveTraining(null);
+  };
+
   const quickActions = [
     { name: t('manageCourses'), desc: t('createEditCourses'), icon: BookOpenIcon, href: '/app/courses' },
     { name: t('manageUsers'), desc: t('manageUserAccounts'), icon: UserGroupIcon, href: '/app/users' },
@@ -197,13 +286,22 @@ export default function DashboardPage() {
                       {(assignment.content_type || '—').toUpperCase()}
                     </p>
                   </div>
-                  <div className="flex flex-wrap items-center gap-2 text-xs">
-                    <span className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-0.5 font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200">
-                      {formatStatusLabel(assignment.status)}
-                    </span>
-                    <span className="text-slate-500 dark:text-slate-300">
-                      {Math.round(assignment.progress_percentage ?? 0)}% {t('complete') || 'complete'}
-                    </span>
+                  <div className="flex flex-col items-start gap-2 text-xs sm:items-end">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-0.5 font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200">
+                        {formatStatusLabel(assignment.status)}
+                      </span>
+                      <span className="text-slate-500 dark:text-slate-300">
+                        {Math.round(assignment.progress_percentage ?? 0)}% {t('complete') || 'complete'}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleStartTraining(assignment)}
+                      className="inline-flex items-center justify-center rounded-xl border border-slate-200 px-3 py-1.5 font-semibold text-slate-600 transition hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-200"
+                    >
+                      {t('startTraining') || 'Start Training'}
+                    </button>
                   </div>
                 </div>
               ))
@@ -317,6 +415,12 @@ export default function DashboardPage() {
           setSelectedApproval(null);
         }}
         onApprove={handleApproveRecord}
+      />
+      <TrainingFlowModal
+        open={Boolean(activeTraining)}
+        training={activeTraining}
+        onClose={handleTrainingModalClose}
+        onComplete={handleTrainingComplete}
       />
     </div>
   );
