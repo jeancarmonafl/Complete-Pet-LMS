@@ -7,7 +7,8 @@ const envSchema = z.object({
   PORT: z.coerce.number().default(4000),
   DATABASE_URL: z.string(),
   JWT_SECRET: z.string().min(32),
-  PASSWORD_SALT_ROUNDS: z.coerce.number().default(12)
+  PASSWORD_SALT_ROUNDS: z.coerce.number().default(12),
+  FILE_BASE_URL: z.string().url().optional()
 });
 
 const env = envSchema.parse(process.env);

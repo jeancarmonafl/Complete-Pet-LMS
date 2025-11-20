@@ -140,3 +140,25 @@ export async function updateCourseStatusHandler(req: AuthenticatedRequest, res: 
     return res.status(500).json({ message: 'Unable to update course status' });
   }
 }
+
+export function uploadCourseContentHandler(req: AuthenticatedRequest, res: Response) {
+  if (!req.user) {
+    return res.status(401).json({ message: 'Unauthorized' });
+  }
+
+  if (!['global_admin', 'admin'].includes(req.user.role)) {
+    return res.status(403).json({ message: 'Forbidden' });
+  }
+
+  if (!req.file) {
+    return res.status(400).json({ message: 'No file uploaded' });
+  }
+
+  const publicPath = `/uploads/${req.file.filename}`;
+  const baseUrl = `${req.protocol}://${req.get('host')}`;
+  return res.json({
+    url: `${baseUrl}${publicPath}`,
+    path: publicPath,
+    mimeType: req.file.mimetype
+  });
+}

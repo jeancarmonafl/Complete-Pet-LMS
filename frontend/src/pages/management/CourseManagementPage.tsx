@@ -249,7 +249,24 @@ export default function CourseManagementPage() {
     { id: 'manager', name: 'Manager' }
   ];
 
-  const handleCreate = (data: CourseForm) => {
+const uploadCourseContent = async (file: File) => {
+  const formData = new FormData();
+  formData.append('file', file);
+
+  const response = await api.post('/courses/upload', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' }
+  });
+
+  return response.data.url as string;
+};
+
+const handleCreate = async (data: CourseForm) => {
+  try {
+    let contentUrl: string | undefined;
+    if (data.contentFile?.[0]) {
+      contentUrl = await uploadCourseContent(data.contentFile[0]);
+    }
+
     createCourseMutation.mutate({
       title: data.title,
       description: data.description,
@@ -263,9 +280,13 @@ export default function CourseManagementPage() {
       positionScope: data.positionScope,
       selectedPositions: data.selectedPositions,
       exceptionPositions: data.exceptionPositions,
-      questions: data.questions
+      questions: data.questions,
+      contentUrl
     });
-  };
+  } catch (error: any) {
+    alert(`Error uploading course content: ${error.response?.data?.message || error.message}`);
+  }
+};
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -339,9 +360,15 @@ export default function CourseManagementPage() {
     });
   };
 
-  const handleUpdate = (data: CourseForm) => {
-    if (!editingCourse) return;
-    
+const handleUpdate = async (data: CourseForm) => {
+  if (!editingCourse) return;
+
+  try {
+    let contentUrl: string | undefined;
+    if (data.contentFile?.[0]) {
+      contentUrl = await uploadCourseContent(data.contentFile[0]);
+    }
+
     updateCourseMutation.mutate({
       id: editingCourse.id,
       data: {
@@ -357,10 +384,14 @@ export default function CourseManagementPage() {
         positionScope: data.positionScope,
         selectedPositions: data.selectedPositions,
         exceptionPositions: data.exceptionPositions,
-        questions: data.questions
+        questions: data.questions,
+        contentUrl
       }
     });
-  };
+  } catch (error: any) {
+    alert(`Error uploading course content: ${error.response?.data?.message || error.message}`);
+  }
+};
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {

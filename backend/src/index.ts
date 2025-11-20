@@ -1,6 +1,9 @@
 import cors from 'cors';
 import express from 'express';
+import fs from 'node:fs';
 import helmet from 'helmet';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import env from './config/env.js';
 import authRoutes from './routes/authRoutes.js';
@@ -9,10 +12,17 @@ import courseRoutes from './routes/courseRoutes.js';
 import userRoutes from './routes/userRoutes.js';
 
 const app = express();
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const uploadsDir = path.resolve(__dirname, '../uploads');
+
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+}
 
 app.use(helmet());
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
+app.use('/uploads', express.static(uploadsDir));
 
 app.get('/health', (_req, res) => {
   res.json({ status: 'ok', environment: env.NODE_ENV });
