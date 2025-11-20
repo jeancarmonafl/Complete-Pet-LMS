@@ -8,7 +8,7 @@ interface CoursePayload {
   title: string;
   description?: string;
   category?: string;
-  contentType: 'video' | 'pdf' | 'scorm' | 'other';
+  contentType: 'video' | 'pdf' | 'powerpoint' | 'scorm' | 'other';
   contentUrl?: string;
   durationMinutes?: number;
   passPercentage?: number;
