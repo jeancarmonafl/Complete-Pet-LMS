@@ -49,13 +49,17 @@ const DEFAULT_TRAINING_PASS_PERCENTAGE = 80;
 const mapContentType = (
   type?: string | null
 ): TrainingAssignment["contentType"] => {
-  switch ((type || "").trim().toLowerCase()) {
+  const normalized = (type || "").trim().toLowerCase();
+  switch (normalized) {
+    case "video":
+      return "video";
     case "pdf":
       return "pdf";
     case "powerpoint":
     case "ppt":
       return "powerpoint";
     default:
+      console.warn(`Unknown content type: ${type}, defaulting to video`);
       return "video";
   }
 };
@@ -103,6 +107,14 @@ const convertActivityToTrainingAssignment = (
   const defaultDueDate = new Date(
     Date.now() + 7 * 24 * 60 * 60 * 1000
   ).toISOString();
+
+  // Debug logging
+  console.log("Converting activity record:", {
+    record,
+    content_type: record.content_type,
+    content_url: record.content_url,
+    mapped_type: mapContentType(record.content_type)
+  });
 
   return {
     id: record.id,

@@ -155,9 +155,14 @@ export function uploadCourseContentHandler(req: AuthenticatedRequest, res: Respo
   }
 
   const publicPath = `/uploads/${req.file.filename}`;
-  const baseUrl = `${req.protocol}://${req.get('host')}`;
+  
+  // In development, return relative path so it works with proxy
+  // In production, return full URL
+  const isDevelopment = process.env.NODE_ENV === 'development';
+  const url = isDevelopment ? publicPath : `${req.protocol}://${req.get('host')}${publicPath}`;
+  
   return res.json({
-    url: `${baseUrl}${publicPath}`,
+    url,
     path: publicPath,
     mimeType: req.file.mimetype
   });

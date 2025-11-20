@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { TrainingAssignment } from "../contexts/useTrainingStore";
 import { Modal } from "./Modal";
+import { getContentUrl } from "../utils/contentUrl";
 
 interface TrainingFlowModalProps {
   open: boolean;
@@ -294,6 +295,14 @@ export function TrainingFlowModal({
     const hasVideoContent =
       training?.contentType === "video" && Boolean(training?.contentUrl);
 
+    // Debug logging
+    console.log("Training data in modal:", {
+      training,
+      contentType: training?.contentType,
+      contentUrl: training?.contentUrl,
+      hasVideoContent
+    });
+
     return (
       <div className="space-y-4">
         <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-900/60">
@@ -318,7 +327,7 @@ export function TrainingFlowModal({
             <div className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-900 dark:border-slate-700">
               <video
                 ref={videoRef}
-                src={training?.contentUrl ?? undefined}
+                src={getContentUrl(training?.contentUrl) ?? undefined}
                 controls
                 controlsList="nodownload"
                 playsInline
@@ -341,7 +350,7 @@ export function TrainingFlowModal({
             </p>
             {training?.contentUrl ? (
               <a
-                href={training.contentUrl}
+                href={getContentUrl(training.contentUrl) ?? "#"}
                 target="_blank"
                 rel="noreferrer noopener"
                 className="mt-3 inline-flex items-center text-sm font-semibold text-primary hover:text-primary/80"
