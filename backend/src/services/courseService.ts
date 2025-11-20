@@ -22,6 +22,9 @@ interface CoursePayload {
 }
 
 export async function createCourse(payload: CoursePayload) {
+  console.log('Creating course with payload:', payload);
+  console.log('ContentUrl in payload:', payload.contentUrl);
+  
   const result = await pool.query(
     `INSERT INTO courses (
       organization_id,
@@ -62,6 +65,9 @@ export async function createCourse(payload: CoursePayload) {
     ]
   );
 
+  console.log('Created course:', result.rows[0]);
+  console.log('ContentUrl in created course:', result.rows[0]?.content_url);
+  
   return result.rows[0];
 }
 

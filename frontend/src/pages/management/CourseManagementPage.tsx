@@ -125,6 +125,8 @@ export default function CourseManagementPage() {
   // Create course mutation
   const createCourseMutation = useMutation({
     mutationFn: async (courseData: any) => {
+      console.log('Creating course with data:', courseData);
+      console.log('contentUrl in course data:', courseData.contentUrl);
       const response = await api.post('/courses', courseData);
       return response.data;
     },
@@ -250,39 +252,58 @@ export default function CourseManagementPage() {
   ];
 
 const uploadCourseContent = async (file: File) => {
+  console.log('Uploading file:', file.name, file.size, file.type);
+  
   const formData = new FormData();
   formData.append('file', file);
 
-  const response = await api.post('/courses/upload', formData, {
-    headers: { 'Content-Type': 'multipart/form-data' }
-  });
-
-  return response.data.url as string;
+  try {
+    // Don't set Content-Type header - let browser set it with boundary
+    const response = await api.post('/courses/upload', formData);
+    
+    console.log('Upload response:', response.data);
+    return response.data.url as string;
+  } catch (error) {
+    console.error('Upload error:', error);
+    throw error;
+  }
 };
 
 const handleCreate = async (data: CourseForm) => {
+  console.log('handleCreate called with data:', data);
+  console.log('contentFile:', data.contentFile);
+  
   try {
     let contentUrl: string | undefined;
     if (data.contentFile?.[0]) {
+      console.log('File found, uploading...');
       contentUrl = await uploadCourseContent(data.contentFile[0]);
+      console.log('File uploaded, URL:', contentUrl);
+    } else {
+      console.log('No file provided');
     }
 
-    createCourseMutation.mutate({
+    const coursePayload = {
       title: data.title,
       description: data.description,
       contentType: data.contentType,
+      contentUrl: contentUrl,
       durationMinutes: data.durationMinutes,
       passPercentage: data.passPercentage,
       isMandatory: data.isMandatory,
       isPublished: data.isPublished,
-      departmentScope: data.departmentScope,
-      selectedDepartments: data.selectedDepartments,
-      positionScope: data.positionScope,
-      selectedPositions: data.selectedPositions,
+      assignedDepartments: data.departmentScope === 'specific' ? data.selectedDepartments : [],
+      assignedPositions: data.positionScope === 'specific' ? data.selectedPositions : [],
+      assignToEntireCompany: data.departmentScope === 'all' && data.positionScope === 'all',
       exceptionPositions: data.exceptionPositions,
-      questions: data.questions,
-      contentUrl
-    });
+      isActive: true
+    };
+    
+    console.log('Course payload to send:', coursePayload);
+    console.log('ContentUrl specifically:', coursePayload.contentUrl);
+    
+    // TODO: Handle quiz questions separately after course creation
+    createCourseMutation.mutate(coursePayload);
   } catch (error: any) {
     alert(`Error uploading course content: ${error.response?.data?.message || error.message}`);
   }
@@ -396,6 +417,9 @@ const handleUpdate = async (data: CourseForm) => {
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       setFileName(e.target.files[0].name);
+      // Manually set the file in react-hook-form
+      setValue('contentFile', e.target.files);
+      console.log('File selected:', e.target.files[0].name);
     }
   };
 

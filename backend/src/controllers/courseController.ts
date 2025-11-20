@@ -8,8 +8,8 @@ const courseSchema = z.object({
   title: z.string().min(1),
   description: z.string().optional(),
   category: z.string().optional(),
-  contentType: z.enum(['video', 'pdf', 'scorm', 'other']),
-  contentUrl: z.string().url().optional(),
+  contentType: z.enum(['video', 'pdf', 'powerpoint', 'scorm', 'other']),
+  contentUrl: z.string().optional(), // Remove URL validation - we're using relative paths
   durationMinutes: z.coerce.number().int().positive().optional(),
   passPercentage: z.coerce.number().min(1).max(100).optional(),
   isMandatory: z.boolean().optional(),
@@ -22,12 +22,17 @@ const courseSchema = z.object({
 });
 
 export async function createCourseHandler(req: AuthenticatedRequest, res: Response) {
+  console.log('Create course request body:', req.body);
+  console.log('ContentUrl in request:', req.body.contentUrl);
+  
   if (!req.user) {
     return res.status(401).json({ message: 'Unauthorized' });
   }
 
   try {
     const body = courseSchema.parse(req.body);
+    console.log('Parsed course body:', body);
+    console.log('ContentUrl after parsing:', body.contentUrl);
 
     if (!['global_admin', 'admin'].includes(req.user.role)) {
       return res.status(403).json({ message: 'Forbidden' });
@@ -142,6 +147,10 @@ export async function updateCourseStatusHandler(req: AuthenticatedRequest, res: 
 }
 
 export function uploadCourseContentHandler(req: AuthenticatedRequest, res: Response) {
+  console.log('Upload handler called');
+  console.log('File:', req.file);
+  console.log('Body:', req.body);
+  
   if (!req.user) {
     return res.status(401).json({ message: 'Unauthorized' });
   }
@@ -151,6 +160,7 @@ export function uploadCourseContentHandler(req: AuthenticatedRequest, res: Respo
   }
 
   if (!req.file) {
+    console.error('No file in request');
     return res.status(400).json({ message: 'No file uploaded' });
   }
 
