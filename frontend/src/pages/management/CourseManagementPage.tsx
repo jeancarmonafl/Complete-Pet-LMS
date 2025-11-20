@@ -92,6 +92,7 @@ export default function CourseManagementPage() {
   const [openDropdownId, setOpenDropdownId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'details' | 'rules' | 'quiz'>('details');
   const [fileName, setFileName] = useState<string>('');
+  const selectedFileRef = useRef<File | null>(null);
   const [sortField, setSortField] = useState<string>('created_at');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const [searchQuery, setSearchQuery] = useState('');
@@ -136,6 +137,7 @@ export default function CourseManagementPage() {
       setCreateOpen(false);
       setActiveTab('details');
       setFileName('');
+      selectedFileRef.current = null;
       alert('Course created successfully!');
     },
     onError: (error: any) => {
@@ -272,15 +274,23 @@ const uploadCourseContent = async (file: File) => {
 const handleCreate = async (data: CourseForm) => {
   console.log('handleCreate called with data:', data);
   console.log('contentFile:', data.contentFile);
+  console.log('contentFile length:', data.contentFile?.length);
+  console.log('contentFile[0]:', data.contentFile?.[0]);
+  console.log('selectedFileRef.current:', selectedFileRef.current);
   
   try {
     let contentUrl: string | undefined;
-    if (data.contentFile?.[0]) {
-      console.log('File found, uploading...');
-      contentUrl = await uploadCourseContent(data.contentFile[0]);
+    
+    // Try to get file from form data first, then from ref
+    const fileToUpload = data.contentFile?.[0] || selectedFileRef.current;
+    
+    if (fileToUpload) {
+      console.log('File found, uploading:', fileToUpload.name);
+      contentUrl = await uploadCourseContent(fileToUpload);
       console.log('File uploaded, URL:', contentUrl);
     } else {
       console.log('No file provided');
+      console.log('contentFile length:', data.contentFile?.length, 'ref:', selectedFileRef.current);
     }
 
     const coursePayload = {
@@ -415,11 +425,22 @@ const handleUpdate = async (data: CourseForm) => {
 };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      setFileName(e.target.files[0].name);
+    const files = e.target.files;
+    console.log('handleFileChange called, files:', files);
+    
+    if (files && files.length > 0 && files[0]) {
+      const file = files[0];
+      setFileName(file.name);
+      selectedFileRef.current = file;
       // Manually set the file in react-hook-form
-      setValue('contentFile', e.target.files);
-      console.log('File selected:', e.target.files[0].name);
+      setValue('contentFile', files);
+      console.log('File selected:', file.name, 'Size:', file.size, 'Type:', file.type);
+      console.log('File stored in ref:', selectedFileRef.current);
+    } else {
+      console.log('No files selected');
+      setFileName('');
+      selectedFileRef.current = null;
+      setValue('contentFile', undefined);
     }
   };
 
@@ -665,6 +686,7 @@ const handleUpdate = async (data: CourseForm) => {
           setCreateOpen(false);
           setActiveTab('details');
           setFileName('');
+          selectedFileRef.current = null;
         }}
         title={t('createNewCourse')}
         description={t('fillDetailsToCreate')}
@@ -781,7 +803,7 @@ const handleUpdate = async (data: CourseForm) => {
 
               <div>
                 <label className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-200">
-                  {t('courseContentFile')} *
+                  {t('courseContentFile')}
                 </label>
                 <div className="flex items-center gap-3">
                   <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-primary hover:text-primary dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
@@ -790,8 +812,14 @@ const handleUpdate = async (data: CourseForm) => {
                     <input
                       type="file"
                       className="hidden"
-                      {...register('contentFile')}
-                      onChange={handleFileChange}
+                      onChange={(e) => {
+                        const registration = register('contentFile');
+                        registration.onChange(e);
+                        handleFileChange(e);
+                      }}
+                      onBlur={register('contentFile').onBlur}
+                      name={register('contentFile').name}
+                      ref={register('contentFile').ref}
                       accept=".pdf,.mp4,.ppt,.pptx,.zip"
                     />
                   </label>
@@ -993,6 +1021,7 @@ const handleUpdate = async (data: CourseForm) => {
                 setCreateOpen(false);
                 setActiveTab('details');
                 setFileName('');
+                selectedFileRef.current = null;
               }}
               className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-300"
             >
@@ -1142,8 +1171,14 @@ const handleUpdate = async (data: CourseForm) => {
                     <input
                       type="file"
                       className="hidden"
-                      {...register('contentFile')}
-                      onChange={handleFileChange}
+                      onChange={(e) => {
+                        const registration = register('contentFile');
+                        registration.onChange(e);
+                        handleFileChange(e);
+                      }}
+                      onBlur={register('contentFile').onBlur}
+                      name={register('contentFile').name}
+                      ref={register('contentFile').ref}
                       accept=".pdf,.mp4,.ppt,.pptx,.zip"
                     />
                   </label>
