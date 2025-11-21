@@ -175,7 +175,7 @@ export default function DashboardPage() {
       const response = await api.get('/training-records/pending-approvals');
       return response.data;
     },
-    enabled: user?.appRole === 'global_admin' || user?.appRole === 'admin',
+    enabled: user?.role === 'global_admin' || user?.role === 'admin',
     staleTime: 30 * 1000 // 30 seconds
   });
 
