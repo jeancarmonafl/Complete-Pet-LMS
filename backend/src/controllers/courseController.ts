@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { AuthenticatedRequest } from '../middleware/auth.js';
 import { createCourse, deleteCourse, listCourses, updateCourse, updateCourseStatus, getQuizByCourseId } from '../services/courseService.js';
 
-const courseSchema = z.object({
+const courseSchemaBase = z.object({
   title: z.string().min(1),
   description: z.string().optional(),
   category: z.string().optional(),
@@ -22,7 +22,9 @@ const courseSchema = z.object({
   assignToEntireCompany: z.boolean().optional(),
   exceptionPositions: z.array(z.string()).optional(),
   isActive: z.boolean().optional()
-}).refine((data) => {
+});
+
+const courseSchema = courseSchemaBase.refine((data) => {
   // If publishing, all 3 language URLs must be present
   if (data.isPublished && (data.contentType === 'video' || data.contentType === 'pdf' || data.contentType === 'powerpoint')) {
     return data.contentUrlEn && data.contentUrlEs && data.contentUrlNe;
@@ -82,7 +84,7 @@ export async function updateCourseHandler(req: AuthenticatedRequest, res: Respon
 
   try {
     const courseId = req.params.id;
-    const body = courseSchema.partial().parse(req.body);
+    const body = courseSchemaBase.partial().parse(req.body);
 
     if (!['global_admin', 'admin'].includes(req.user.role)) {
       return res.status(403).json({ message: 'Forbidden' });

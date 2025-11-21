@@ -29,7 +29,7 @@ export async function createTrainingRecordHandler(req: AuthenticatedRequest, res
     const body = createRecordSchema.parse(req.body);
 
     const record = await createTrainingRecord({
-      userId: req.user.userId,
+      userId: req.user.id,
       organizationId: req.user.organizationId,
       locationId: req.user.locationId,
       ...body
@@ -105,7 +105,7 @@ export async function approveTrainingRecordHandler(req: AuthenticatedRequest, re
 
     const record = await approveTrainingRecord(
       recordId,
-      req.user.userId,
+      req.user.id,
       supervisorSignature,
       req.user.locationId
     );
