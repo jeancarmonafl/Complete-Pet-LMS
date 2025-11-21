@@ -6,7 +6,7 @@ import {
   UserGroupIcon,
   UsersIcon,
 } from "@heroicons/react/24/outline";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
@@ -27,6 +27,9 @@ interface ActivityRecord {
   course_title: string;
   content_type: string;
   content_url?: string | null;
+  content_url_en?: string | null;
+  content_url_es?: string | null;
+  content_url_ne?: string | null;
   duration_minutes?: number | null;
   pass_percentage?: number | null;
   status?: string | null;
@@ -37,6 +40,7 @@ interface ActivityRecord {
   quiz_score: number | null;
   approval_status: string | null;
   supervisor_signature_date: string | null;
+  quiz_questions?: any;
 }
 
 interface UserActivityResponse {
@@ -64,6 +68,7 @@ const mapContentType = (
   }
 };
 
+// Fallback quiz generator if no quiz exists in database
 const generateDefaultQuiz = (title: string) => {
   const safeTitle = title || "this training";
   return [
@@ -113,8 +118,25 @@ const convertActivityToTrainingAssignment = (
     record,
     content_type: record.content_type,
     content_url: record.content_url,
+    quiz_questions: record.quiz_questions,
     mapped_type: mapContentType(record.content_type)
   });
+
+  // Use quiz questions from database if available, otherwise use default
+  let quizQuestions = generateDefaultQuiz(record.course_title);
+  if (record.quiz_questions) {
+    try {
+      // quiz_questions is already parsed as an object (JSONB from postgres)
+      const parsedQuestions = Array.isArray(record.quiz_questions) 
+        ? record.quiz_questions 
+        : JSON.parse(record.quiz_questions);
+      if (Array.isArray(parsedQuestions) && parsedQuestions.length > 0) {
+        quizQuestions = parsedQuestions;
+      }
+    } catch (error) {
+      console.error("Error parsing quiz questions:", error);
+    }
+  }
 
   return {
     id: record.id,
@@ -122,18 +144,22 @@ const convertActivityToTrainingAssignment = (
     title: record.course_title,
     contentType: mapContentType(record.content_type),
     contentUrl: record.content_url ?? null,
+    contentUrlEn: record.content_url_en ?? null,
+    contentUrlEs: record.content_url_es ?? null,
+    contentUrlNe: record.content_url_ne ?? null,
     durationMinutes:
       record.duration_minutes ?? DEFAULT_TRAINING_DURATION_MINUTES,
     passPercentage:
       record.pass_percentage ?? DEFAULT_TRAINING_PASS_PERCENTAGE,
     assignedDate: record.started_date ?? nowIso,
     dueDate: record.deadline ?? defaultDueDate,
-    quiz: generateDefaultQuiz(record.course_title),
+    quiz: quizQuestions,
   };
 };
 
 export default function DashboardPage() {
   const { t } = useTranslation();
+  const queryClient = useQueryClient();
   const user = useAuthStore((state) => state.user);
   const userId = user?.id;
   const [selectedApproval, setSelectedApproval] =
@@ -141,7 +167,17 @@ export default function DashboardPage() {
   const [isApprovalModalOpen, setApprovalModalOpen] = useState(false);
   const [activeTraining, setActiveTraining] =
     useState<TrainingAssignment | null>(null);
-  const { approvalsQueue, approveTraining } = useTrainingStore();
+
+  // Fetch pending approvals for admins
+  const { data: pendingApprovals = [] } = useQuery({
+    queryKey: ['pendingApprovals'],
+    queryFn: async () => {
+      const response = await api.get('/training-records/pending-approvals');
+      return response.data;
+    },
+    enabled: user?.appRole === 'global_admin' || user?.appRole === 'admin',
+    staleTime: 30 * 1000 // 30 seconds
+  });
 
   const {
     data: userAssignments,
@@ -230,13 +266,44 @@ export default function DashboardPage() {
     setApprovalModalOpen(true);
   };
 
-  const handleApproveRecord = (signature: string) => {
+  const handleApproveRecord = async (signature: string) => {
     if (!selectedApproval) return;
 
-    approveTraining(selectedApproval.id, {
-      name: user?.fullName || "Supervisor",
-      signature,
-    });
+    try {
+      await api.patch(`/training-records/${selectedApproval.id}/approve`, {
+        supervisorSignature: signature
+      });
+
+      // Refresh approvals list
+      queryClient.invalidateQueries({ queryKey: ['pendingApprovals'] });
+      
+      alert('Training approved successfully!');
+    } catch (error: any) {
+      console.error('Error approving training:', error);
+      alert(`Error approving training: ${error.response?.data?.message || error.message}`);
+    }
+
+    setSelectedApproval(null);
+    setApprovalModalOpen(false);
+  };
+
+  const handleDenyRecord = async (reason: string) => {
+    if (!selectedApproval) return;
+
+    try {
+      await api.patch(`/training-records/${selectedApproval.id}/deny`, {
+        reason
+      });
+
+      // Refresh approvals list and dashboard assignments
+      queryClient.invalidateQueries({ queryKey: ['pendingApprovals'] });
+      queryClient.invalidateQueries({ queryKey: ["dashboardAssignments", userId] });
+      
+      alert('Training denied. The employee will need to retake the training.');
+    } catch (error: any) {
+      console.error('Error denying training:', error);
+      alert(`Error denying training: ${error.response?.data?.message || error.message}`);
+    }
 
     setSelectedApproval(null);
     setApprovalModalOpen(false);
@@ -251,16 +318,37 @@ export default function DashboardPage() {
     setActiveTraining(null);
   };
 
-  const handleTrainingComplete = (result: {
+  const handleTrainingComplete = async (result: {
     quizScore: number;
     signature: string;
   }) => {
     if (!activeTraining) return;
-    console.info("Training complete", {
-      trainingId: activeTraining.id,
-      quizScore: result.quizScore,
-      signatureProvided: Boolean(result.signature),
-    });
+    
+    try {
+      // Persist training completion to database
+      await api.post('/training-records', {
+        courseId: activeTraining.courseId,
+        enrollmentId: activeTraining.id,
+        quizScore: result.quizScore,
+        passPercentage: activeTraining.passPercentage,
+        employeeSignature: result.signature,
+        durationMinutes: activeTraining.durationMinutes
+      });
+
+      console.info("Training completed and saved", {
+        trainingId: activeTraining.id,
+        quizScore: result.quizScore,
+      });
+
+      // Refresh the assignments list
+      queryClient.invalidateQueries({ queryKey: ["dashboardAssignments", userId] });
+      
+      alert('Training completed successfully! Your submission is pending approval.');
+    } catch (error: any) {
+      console.error("Error saving training completion:", error);
+      alert(`Error saving training completion: ${error.response?.data?.message || error.message}`);
+    }
+    
     setActiveTraining(null);
   };
 
@@ -411,28 +499,38 @@ export default function DashboardPage() {
             </div>
           </div>
           <div className="mt-4 space-y-3">
-            {approvalsQueue.length === 0 ? (
+            {pendingApprovals.length === 0 ? (
               <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-700 dark:border-blue-500/40 dark:bg-blue-500/10 dark:text-blue-200">
                 {t("noApprovalsPending") || "No Approvals Pending ✅"}
               </div>
             ) : (
-              approvalsQueue.map((record) => (
+              pendingApprovals.map((record: any) => (
                 <div
                   key={record.id}
                   className="flex flex-col gap-2 rounded-xl border border-slate-200 p-4 text-sm dark:border-slate-700 sm:flex-row sm:items-center sm:justify-between"
                 >
                   <div>
                     <p className="font-semibold text-slate-900 dark:text-white">
-                      {record.courseTitle}
+                      {record.course_title}
                     </p>
                     <p className="text-xs text-slate-500 dark:text-slate-400">
-                      {record.employeeName} ·{" "}
-                      {new Date(record.completionDate).toLocaleString()} ·{" "}
-                      {record.quizScore}%
+                      {record.employee_name} ·{" "}
+                      {new Date(record.completion_date).toLocaleString()} ·{" "}
+                      {record.quiz_score}%
                     </p>
                   </div>
                   <button
-                    onClick={() => handleOpenApproval(record)}
+                    onClick={() => handleOpenApproval({
+                      id: record.id,
+                      courseTitle: record.course_title,
+                      employeeName: record.employee_name,
+                      employeeId: record.employee_id,
+                      completionDate: record.completion_date,
+                      quizScore: record.quiz_score,
+                      passPercentage: record.pass_percentage,
+                      employeeSignature: record.employee_signature_data,
+                      durationMinutes: record.duration_minutes
+                    } as TrainingRecord)}
                     className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 transition hover:border-primary hover:text-primary dark:border-slate-700 dark:text-slate-300"
                   >
                     {t("reviewAndApprove") || "Review & approve"}
@@ -535,6 +633,7 @@ export default function DashboardPage() {
           setSelectedApproval(null);
         }}
         onApprove={handleApproveRecord}
+        onDeny={handleDenyRecord}
       />
       <TrainingFlowModal
         open={Boolean(activeTraining)}

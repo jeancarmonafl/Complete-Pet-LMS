@@ -2,14 +2,17 @@ import { Response } from 'express';
 import { z } from 'zod';
 
 import { AuthenticatedRequest } from '../middleware/auth.js';
-import { createCourse, deleteCourse, listCourses, updateCourse, updateCourseStatus } from '../services/courseService.js';
+import { createCourse, deleteCourse, listCourses, updateCourse, updateCourseStatus, getQuizByCourseId } from '../services/courseService.js';
 
 const courseSchema = z.object({
   title: z.string().min(1),
   description: z.string().optional(),
   category: z.string().optional(),
   contentType: z.enum(['video', 'pdf', 'powerpoint', 'scorm', 'other']),
-  contentUrl: z.string().optional(), // Remove URL validation - we're using relative paths
+  contentUrl: z.string().optional(), // Legacy field for backward compatibility
+  contentUrlEn: z.string().optional(),
+  contentUrlEs: z.string().optional(),
+  contentUrlNe: z.string().optional(),
   durationMinutes: z.coerce.number().int().positive().optional(),
   passPercentage: z.coerce.number().min(1).max(100).optional(),
   isMandatory: z.boolean().optional(),
@@ -19,6 +22,15 @@ const courseSchema = z.object({
   assignToEntireCompany: z.boolean().optional(),
   exceptionPositions: z.array(z.string()).optional(),
   isActive: z.boolean().optional()
+}).refine((data) => {
+  // If publishing, all 3 language URLs must be present
+  if (data.isPublished && (data.contentType === 'video' || data.contentType === 'pdf' || data.contentType === 'powerpoint')) {
+    return data.contentUrlEn && data.contentUrlEs && data.contentUrlNe;
+  }
+  return true;
+}, {
+  message: 'All three language versions (English, Spanish, Nepalese) are required when publishing a course',
+  path: ['contentUrlEn']
 });
 
 export async function createCourseHandler(req: AuthenticatedRequest, res: Response) {
@@ -149,6 +161,7 @@ export async function updateCourseStatusHandler(req: AuthenticatedRequest, res: 
 export function uploadCourseContentHandler(req: AuthenticatedRequest, res: Response) {
   console.log('Upload handler called');
   console.log('File:', req.file);
+  console.log('Files:', req.files);
   console.log('Body:', req.body);
   
   if (!req.user) {
@@ -159,6 +172,25 @@ export function uploadCourseContentHandler(req: AuthenticatedRequest, res: Respo
     return res.status(403).json({ message: 'Forbidden' });
   }
 
+  // Handle multiple file uploads (for multi-language support)
+  if (req.files && typeof req.files === 'object' && !Array.isArray(req.files)) {
+    const files = req.files as { [fieldname: string]: Express.Multer.File[] };
+    const isDevelopment = process.env.NODE_ENV === 'development';
+    const urls: { [key: string]: string } = {};
+
+    for (const [fieldName, fileArray] of Object.entries(files)) {
+      if (fileArray && fileArray.length > 0) {
+        const file = fileArray[0];
+        const publicPath = `/uploads/${file.filename}`;
+        const url = isDevelopment ? publicPath : `${req.protocol}://${req.get('host')}${publicPath}`;
+        urls[fieldName] = url;
+      }
+    }
+
+    return res.json({ urls });
+  }
+
+  // Handle single file upload (legacy)
   if (!req.file) {
     console.error('No file in request');
     return res.status(400).json({ message: 'No file uploaded' });
@@ -176,4 +208,24 @@ export function uploadCourseContentHandler(req: AuthenticatedRequest, res: Respo
     path: publicPath,
     mimeType: req.file.mimetype
   });
+}
+
+export async function getQuizHandler(req: AuthenticatedRequest, res: Response) {
+  if (!req.user) {
+    return res.status(401).json({ message: 'Unauthorized' });
+  }
+
+  try {
+    const courseId = req.params.courseId;
+    const quiz = await getQuizByCourseId(courseId);
+
+    if (!quiz) {
+      return res.status(404).json({ message: 'Quiz not found for this course' });
+    }
+
+    return res.json(quiz);
+  } catch (error) {
+    console.error('Error fetching quiz:', error);
+    return res.status(500).json({ message: 'Unable to fetch quiz' });
+  }
 }

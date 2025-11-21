@@ -29,7 +29,10 @@ interface CourseForm {
   contentType: string;
   durationMinutes?: number;
   passPercentage: number;
-  contentFile?: FileList;
+  contentFile?: FileList; // Legacy single file
+  contentFileEn?: FileList;
+  contentFileEs?: FileList;
+  contentFileNe?: FileList;
   isMandatory: boolean;
   isPublished: boolean;
   // Assignment Rules
@@ -260,9 +263,7 @@ const uploadCourseContent = async (file: File) => {
   formData.append('file', file);
 
   try {
-    // Don't set Content-Type header - let browser set it with boundary
     const response = await api.post('/courses/upload', formData);
-    
     console.log('Upload response:', response.data);
     return response.data.url as string;
   } catch (error) {
@@ -271,33 +272,62 @@ const uploadCourseContent = async (file: File) => {
   }
 };
 
+const uploadMultiLanguageContent = async (files: { en?: File; es?: File; ne?: File }) => {
+  console.log('Uploading multi-language files:', { en: files.en?.name, es: files.es?.name, ne: files.ne?.name });
+  
+  const formData = new FormData();
+  if (files.en) formData.append('fileEn', files.en);
+  if (files.es) formData.append('fileEs', files.es);
+  if (files.ne) formData.append('fileNe', files.ne);
+
+  try {
+    const response = await api.post('/courses/upload-multi', formData);
+    console.log('Multi-upload response:', response.data);
+    return response.data.urls as { fileEn?: string; fileEs?: string; fileNe?: string };
+  } catch (error) {
+    console.error('Multi-upload error:', error);
+    throw error;
+  }
+};
+
 const handleCreate = async (data: CourseForm) => {
   console.log('handleCreate called with data:', data);
-  console.log('contentFile:', data.contentFile);
-  console.log('contentFile length:', data.contentFile?.length);
-  console.log('contentFile[0]:', data.contentFile?.[0]);
-  console.log('selectedFileRef.current:', selectedFileRef.current);
   
   try {
-    let contentUrl: string | undefined;
+    // Check if all 3 language files are provided when publishing
+    const hasEnFile = data.contentFileEn?.[0];
+    const hasEsFile = data.contentFileEs?.[0];
+    const hasNeFile = data.contentFileNe?.[0];
     
-    // Try to get file from form data first, then from ref
-    const fileToUpload = data.contentFile?.[0] || selectedFileRef.current;
+    if (data.isPublished && (!hasEnFile || !hasEsFile || !hasNeFile)) {
+      alert('All three language versions (English, Spanish, Nepalese) are required when publishing a course');
+      return;
+    }
+
+    let contentUrlEn: string | undefined;
+    let contentUrlEs: string | undefined;
+    let contentUrlNe: string | undefined;
     
-    if (fileToUpload) {
-      console.log('File found, uploading:', fileToUpload.name);
-      contentUrl = await uploadCourseContent(fileToUpload);
-      console.log('File uploaded, URL:', contentUrl);
-    } else {
-      console.log('No file provided');
-      console.log('contentFile length:', data.contentFile?.length, 'ref:', selectedFileRef.current);
+    // Upload multi-language files if provided
+    if (hasEnFile || hasEsFile || hasNeFile) {
+      const urls = await uploadMultiLanguageContent({
+        en: hasEnFile,
+        es: hasEsFile,
+        ne: hasNeFile
+      });
+      contentUrlEn = urls.fileEn;
+      contentUrlEs = urls.fileEs;
+      contentUrlNe = urls.fileNe;
+      console.log('Multi-language files uploaded:', { contentUrlEn, contentUrlEs, contentUrlNe });
     }
 
     const coursePayload = {
       title: data.title,
       description: data.description,
       contentType: data.contentType,
-      contentUrl: contentUrl,
+      contentUrlEn,
+      contentUrlEs,
+      contentUrlNe,
       durationMinutes: data.durationMinutes,
       passPercentage: data.passPercentage,
       isMandatory: data.isMandatory,
@@ -310,7 +340,6 @@ const handleCreate = async (data: CourseForm) => {
     };
     
     console.log('Course payload to send:', coursePayload);
-    console.log('ContentUrl specifically:', coursePayload.contentUrl);
     
     // TODO: Handle quiz questions separately after course creation
     createCourseMutation.mutate(coursePayload);
@@ -395,9 +424,32 @@ const handleUpdate = async (data: CourseForm) => {
   if (!editingCourse) return;
 
   try {
-    let contentUrl: string | undefined;
-    if (data.contentFile?.[0]) {
-      contentUrl = await uploadCourseContent(data.contentFile[0]);
+    const hasEnFile = data.contentFileEn?.[0];
+    const hasEsFile = data.contentFileEs?.[0];
+    const hasNeFile = data.contentFileNe?.[0];
+    
+    // If publishing and no existing URLs, require all 3 files
+    if (data.isPublished && 
+        !editingCourse.content_url_en && !editingCourse.content_url_es && !editingCourse.content_url_ne &&
+        (!hasEnFile || !hasEsFile || !hasNeFile)) {
+      alert('All three language versions (English, Spanish, Nepalese) are required when publishing a course');
+      return;
+    }
+
+    let contentUrlEn: string | undefined;
+    let contentUrlEs: string | undefined;
+    let contentUrlNe: string | undefined;
+    
+    // Upload new multi-language files if provided
+    if (hasEnFile || hasEsFile || hasNeFile) {
+      const urls = await uploadMultiLanguageContent({
+        en: hasEnFile,
+        es: hasEsFile,
+        ne: hasNeFile
+      });
+      contentUrlEn = urls.fileEn;
+      contentUrlEs = urls.fileEs;
+      contentUrlNe = urls.fileNe;
     }
 
     updateCourseMutation.mutate({
@@ -416,7 +468,9 @@ const handleUpdate = async (data: CourseForm) => {
         selectedPositions: data.selectedPositions,
         exceptionPositions: data.exceptionPositions,
         questions: data.questions,
-        contentUrl
+        ...(contentUrlEn && { contentUrlEn }),
+        ...(contentUrlEs && { contentUrlEs }),
+        ...(contentUrlNe && { contentUrlNe })
       }
     });
   } catch (error: any) {
@@ -801,31 +855,75 @@ const handleUpdate = async (data: CourseForm) => {
                 />
               </div>
 
-              <div>
+              <div className="space-y-4">
                 <label className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-200">
-                  {t('courseContentFile')}
+                  {t('courseContentFile')} - Multi-Language (All 3 Required for Publishing)
                 </label>
-                <div className="flex items-center gap-3">
-                  <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-primary hover:text-primary dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
-                    <ArrowUpTrayIcon className="h-5 w-5" />
-                    {t('chooseFile')}
-                    <input
-                      type="file"
-                      className="hidden"
-                      onChange={(e) => {
-                        const registration = register('contentFile');
-                        registration.onChange(e);
-                        handleFileChange(e);
-                      }}
-                      onBlur={register('contentFile').onBlur}
-                      name={register('contentFile').name}
-                      ref={register('contentFile').ref}
-                      accept=".pdf,.mp4,.ppt,.pptx,.zip"
-                    />
+                
+                {/* English File Upload */}
+                <div className="rounded-xl border border-slate-200 p-4 dark:border-slate-700">
+                  <label className="mb-2 block text-xs font-semibold text-slate-600 dark:text-slate-300">
+                    🇺🇸 English Version *
                   </label>
-                  <span className="text-sm text-slate-500 dark:text-slate-400">
-                    {fileName || t('noFileChosen')}
-                  </span>
+                  <div className="flex items-center gap-3">
+                    <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-primary hover:text-primary dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                      <ArrowUpTrayIcon className="h-5 w-5" />
+                      Choose English File
+                      <input
+                        type="file"
+                        className="hidden"
+                        {...register('contentFileEn')}
+                        accept=".pdf,.mp4,.ppt,.pptx,.zip"
+                      />
+                    </label>
+                    <span className="text-sm text-slate-500 dark:text-slate-400">
+                      {watch('contentFileEn')?.[0]?.name || 'No file chosen'}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Spanish File Upload */}
+                <div className="rounded-xl border border-slate-200 p-4 dark:border-slate-700">
+                  <label className="mb-2 block text-xs font-semibold text-slate-600 dark:text-slate-300">
+                    🇪🇸 Spanish Version *
+                  </label>
+                  <div className="flex items-center gap-3">
+                    <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-primary hover:text-primary dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                      <ArrowUpTrayIcon className="h-5 w-5" />
+                      Choose Spanish File
+                      <input
+                        type="file"
+                        className="hidden"
+                        {...register('contentFileEs')}
+                        accept=".pdf,.mp4,.ppt,.pptx,.zip"
+                      />
+                    </label>
+                    <span className="text-sm text-slate-500 dark:text-slate-400">
+                      {watch('contentFileEs')?.[0]?.name || 'No file chosen'}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Nepalese File Upload */}
+                <div className="rounded-xl border border-slate-200 p-4 dark:border-slate-700">
+                  <label className="mb-2 block text-xs font-semibold text-slate-600 dark:text-slate-300">
+                    🇳🇵 Nepalese Version *
+                  </label>
+                  <div className="flex items-center gap-3">
+                    <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-primary hover:text-primary dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                      <ArrowUpTrayIcon className="h-5 w-5" />
+                      Choose Nepalese File
+                      <input
+                        type="file"
+                        className="hidden"
+                        {...register('contentFileNe')}
+                        accept=".pdf,.mp4,.ppt,.pptx,.zip"
+                      />
+                    </label>
+                    <span className="text-sm text-slate-500 dark:text-slate-400">
+                      {watch('contentFileNe')?.[0]?.name || 'No file chosen'}
+                    </span>
+                  </div>
                 </div>
               </div>
 
@@ -1160,31 +1258,75 @@ const handleUpdate = async (data: CourseForm) => {
                 />
               </div>
 
-              <div>
+              <div className="space-y-4">
                 <label className="mb-2 block text-sm font-medium text-slate-700 dark:text-slate-200">
-                  {t('courseContentFile')}
+                  {t('courseContentFile')} - Multi-Language (All 3 Required for Publishing)
                 </label>
-                <div className="flex items-center gap-3">
-                  <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-primary hover:text-primary dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
-                    <ArrowUpTrayIcon className="h-5 w-5" />
-                    {t('chooseFile')}
-                    <input
-                      type="file"
-                      className="hidden"
-                      onChange={(e) => {
-                        const registration = register('contentFile');
-                        registration.onChange(e);
-                        handleFileChange(e);
-                      }}
-                      onBlur={register('contentFile').onBlur}
-                      name={register('contentFile').name}
-                      ref={register('contentFile').ref}
-                      accept=".pdf,.mp4,.ppt,.pptx,.zip"
-                    />
+                
+                {/* English File Upload */}
+                <div className="rounded-xl border border-slate-200 p-4 dark:border-slate-700">
+                  <label className="mb-2 block text-xs font-semibold text-slate-600 dark:text-slate-300">
+                    🇺🇸 English Version *
                   </label>
-                  <span className="text-sm text-slate-500 dark:text-slate-400">
-                    {fileName || t('noFileChosen') || 'No file chosen (optional)'}
-                  </span>
+                  <div className="flex items-center gap-3">
+                    <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-primary hover:text-primary dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                      <ArrowUpTrayIcon className="h-5 w-5" />
+                      Choose English File
+                      <input
+                        type="file"
+                        className="hidden"
+                        {...register('contentFileEn')}
+                        accept=".pdf,.mp4,.ppt,.pptx,.zip"
+                      />
+                    </label>
+                    <span className="text-sm text-slate-500 dark:text-slate-400">
+                      {watch('contentFileEn')?.[0]?.name || editingCourse?.content_url_en || 'No file chosen'}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Spanish File Upload */}
+                <div className="rounded-xl border border-slate-200 p-4 dark:border-slate-700">
+                  <label className="mb-2 block text-xs font-semibold text-slate-600 dark:text-slate-300">
+                    🇪🇸 Spanish Version *
+                  </label>
+                  <div className="flex items-center gap-3">
+                    <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-primary hover:text-primary dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                      <ArrowUpTrayIcon className="h-5 w-5" />
+                      Choose Spanish File
+                      <input
+                        type="file"
+                        className="hidden"
+                        {...register('contentFileEs')}
+                        accept=".pdf,.mp4,.ppt,.pptx,.zip"
+                      />
+                    </label>
+                    <span className="text-sm text-slate-500 dark:text-slate-400">
+                      {watch('contentFileEs')?.[0]?.name || editingCourse?.content_url_es || 'No file chosen'}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Nepalese File Upload */}
+                <div className="rounded-xl border border-slate-200 p-4 dark:border-slate-700">
+                  <label className="mb-2 block text-xs font-semibold text-slate-600 dark:text-slate-300">
+                    🇳🇵 Nepalese Version *
+                  </label>
+                  <div className="flex items-center gap-3">
+                    <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-primary hover:text-primary dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                      <ArrowUpTrayIcon className="h-5 w-5" />
+                      Choose Nepalese File
+                      <input
+                        type="file"
+                        className="hidden"
+                        {...register('contentFileNe')}
+                        accept=".pdf,.mp4,.ppt,.pptx,.zip"
+                      />
+                    </label>
+                    <span className="text-sm text-slate-500 dark:text-slate-400">
+                      {watch('contentFileNe')?.[0]?.name || editingCourse?.content_url_ne || 'No file chosen'}
+                    </span>
+                  </div>
                 </div>
               </div>
 

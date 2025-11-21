@@ -13,7 +13,10 @@ export interface TrainingAssignment {
   courseId: string;
   title: string;
   contentType: ContentType;
-  contentUrl?: string | null;
+  contentUrl?: string | null; // Legacy field
+  contentUrlEn?: string | null;
+  contentUrlEs?: string | null;
+  contentUrlNe?: string | null;
   durationMinutes: number;
   passPercentage: number;
   assignedDate: string;

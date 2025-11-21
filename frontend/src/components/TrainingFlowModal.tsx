@@ -18,6 +18,7 @@ export function TrainingFlowModal({
   onComplete,
 }: TrainingFlowModalProps) {
   const [step, setStep] = useState(0);
+  const [selectedLanguage, setSelectedLanguage] = useState<'en' | 'es' | 'ne' | null>(null);
   const [contentProgress, setContentProgress] = useState(0);
   const [contentComplete, setContentComplete] = useState(false);
   const [selectedAnswers, setSelectedAnswers] = useState<number[]>([]);
@@ -159,6 +160,7 @@ export function TrainingFlowModal({
   useEffect(() => {
     if (open && training) {
       setStep(0);
+      setSelectedLanguage(null);
       setContentProgress(0);
       setContentComplete(false);
       setSelectedAnswers(new Array(training.quiz.length).fill(-1));
@@ -180,13 +182,19 @@ export function TrainingFlowModal({
   }, [open, training, prepareCanvas]);
 
   useEffect(() => {
-    if (!open || !training || step !== 0) return;
+    if (!open || !training || step !== 1) return;
 
     setContentProgress(0);
     setContentComplete(false);
 
+    // Get the selected language content URL
+    const contentUrl = selectedLanguage === 'en' ? training.contentUrlEn :
+                      selectedLanguage === 'es' ? training.contentUrlEs :
+                      selectedLanguage === 'ne' ? training.contentUrlNe :
+                      training.contentUrl;
+
     const shouldSimulateProgress =
-      training.contentType !== "video" || !training.contentUrl;
+      training.contentType !== "video" || !contentUrl;
 
     if (!shouldSimulateProgress) {
       return;
@@ -210,7 +218,7 @@ export function TrainingFlowModal({
     return () => {
       clearInterval(timer);
     };
-  }, [open, training, step]);
+  }, [open, training, step, selectedLanguage]);
 
   useEffect(() => {
     if (!open) return;
@@ -250,17 +258,22 @@ export function TrainingFlowModal({
   };
 
   const handleNextStep = () => {
-    if (step === 0 && contentComplete) {
+    if (step === 0 && selectedLanguage) {
       setStep(1);
       return;
     }
 
-    if (step === 1 && canAdvanceFromQuiz) {
+    if (step === 1 && contentComplete) {
       setStep(2);
       return;
     }
 
-    if (step === 2 && quizScore !== null && signatureDataUrl) {
+    if (step === 2 && canAdvanceFromQuiz) {
+      setStep(3);
+      return;
+    }
+
+    if (step === 3 && quizScore !== null && signatureDataUrl) {
       onComplete({ quizScore, signature: signatureDataUrl });
       onClose();
     }
@@ -279,27 +292,119 @@ export function TrainingFlowModal({
   const canAdvanceFromQuiz = quizStepComplete;
 
   const completedSegments =
+    (selectedLanguage ? 1 : 0) +
     (contentComplete ? 1 : 0) +
     (quizStepComplete ? 1 : 0) +
     (signatureDataUrl ? 1 : 0);
 
   const activeSegmentContribution =
-    !contentComplete ? (contentProgress / 100) * (100 / 3) : 0;
+    step === 1 && !contentComplete ? (contentProgress / 100) * (100 / 4) : 0;
 
   const overallProgress = Math.min(
     100,
-    Math.round(completedSegments * (100 / 3) + activeSegmentContribution)
+    Math.round(completedSegments * (100 / 4) + activeSegmentContribution)
+  );
+
+  const renderLanguageSelectionStep = () => (
+    <div className="space-y-4">
+      <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-900/60">
+        <p className="text-sm font-semibold text-slate-900 dark:text-white">
+          Select Your Preferred Language
+        </p>
+        <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+          Choose the language in which you would like to view the training content.
+        </p>
+      </div>
+
+      <div className="space-y-3">
+        <button
+          type="button"
+          onClick={() => setSelectedLanguage('en')}
+          className={`w-full rounded-2xl border p-4 text-left transition ${
+            selectedLanguage === 'en'
+              ? 'border-primary bg-primary/10 dark:bg-primary/20'
+              : 'border-slate-200 bg-white hover:border-primary hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:hover:bg-slate-800'
+          }`}
+        >
+          <div className="flex items-center gap-3">
+            <span className="text-2xl">🇺🇸</span>
+            <div>
+              <p className="text-sm font-semibold text-slate-900 dark:text-white">English</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">View training in English</p>
+            </div>
+            {selectedLanguage === 'en' && (
+              <svg className="ml-auto h-5 w-5 text-primary" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+              </svg>
+            )}
+          </div>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setSelectedLanguage('es')}
+          className={`w-full rounded-2xl border p-4 text-left transition ${
+            selectedLanguage === 'es'
+              ? 'border-primary bg-primary/10 dark:bg-primary/20'
+              : 'border-slate-200 bg-white hover:border-primary hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:hover:bg-slate-800'
+          }`}
+        >
+          <div className="flex items-center gap-3">
+            <span className="text-2xl">🇪🇸</span>
+            <div>
+              <p className="text-sm font-semibold text-slate-900 dark:text-white">Español</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">Ver capacitación en español</p>
+            </div>
+            {selectedLanguage === 'es' && (
+              <svg className="ml-auto h-5 w-5 text-primary" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+              </svg>
+            )}
+          </div>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setSelectedLanguage('ne')}
+          className={`w-full rounded-2xl border p-4 text-left transition ${
+            selectedLanguage === 'ne'
+              ? 'border-primary bg-primary/10 dark:bg-primary/20'
+              : 'border-slate-200 bg-white hover:border-primary hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:hover:bg-slate-800'
+          }`}
+        >
+          <div className="flex items-center gap-3">
+            <span className="text-2xl">🇳🇵</span>
+            <div>
+              <p className="text-sm font-semibold text-slate-900 dark:text-white">नेपाली (Nepalese)</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">नेपालीमा तालिम हेर्नुहोस्</p>
+            </div>
+            {selectedLanguage === 'ne' && (
+              <svg className="ml-auto h-5 w-5 text-primary" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+              </svg>
+            )}
+          </div>
+        </button>
+      </div>
+    </div>
   );
 
   const renderContentStep = () => {
+    // Get the content URL based on selected language
+    const contentUrl = selectedLanguage === 'en' ? training?.contentUrlEn :
+                      selectedLanguage === 'es' ? training?.contentUrlEs :
+                      selectedLanguage === 'ne' ? training?.contentUrlNe :
+                      training?.contentUrl;
+
     const hasVideoContent =
-      training?.contentType === "video" && Boolean(training?.contentUrl);
+      training?.contentType === "video" && Boolean(contentUrl);
 
     // Debug logging
     console.log("Training data in modal:", {
       training,
+      selectedLanguage,
       contentType: training?.contentType,
-      contentUrl: training?.contentUrl,
+      contentUrl,
       hasVideoContent
     });
 
@@ -327,7 +432,7 @@ export function TrainingFlowModal({
             <div className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-900 dark:border-slate-700">
               <video
                 ref={videoRef}
-                src={getContentUrl(training?.contentUrl) ?? undefined}
+                src={getContentUrl(contentUrl) ?? undefined}
                 controls
                 controlsList="nodownload"
                 playsInline
@@ -348,9 +453,9 @@ export function TrainingFlowModal({
               Open the training material and review it completely before
               continuing.
             </p>
-            {training?.contentUrl ? (
+            {contentUrl ? (
               <a
-                href={getContentUrl(training.contentUrl) ?? "#"}
+                href={getContentUrl(contentUrl) ?? "#"}
                 target="_blank"
                 rel="noreferrer noopener"
                 className="mt-3 inline-flex items-center text-sm font-semibold text-primary hover:text-primary/80"
@@ -359,7 +464,7 @@ export function TrainingFlowModal({
               </a>
             ) : (
               <p className="mt-3 text-xs text-red-500">
-                No training file is attached to this course.
+                No training file is attached to this course for the selected language.
               </p>
             )}
             <button
@@ -509,46 +614,56 @@ export function TrainingFlowModal({
   );
 
   const renderStep = () => {
-    if (step === 0) return renderContentStep();
-    if (step === 1) return renderQuizStep();
+    if (step === 0) return renderLanguageSelectionStep();
+    if (step === 1) return renderContentStep();
+    if (step === 2) return renderQuizStep();
     return renderSignatureStep();
   };
 
   const primaryButtonLabel =
     step === 0
+      ? selectedLanguage
+        ? "Continue to content"
+        : "Please select a language"
+      : step === 1
       ? contentComplete
         ? "Go to quiz"
         : "Please finish the content"
-      : step === 1
+      : step === 2
       ? canAdvanceFromQuiz
         ? "Go to signature"
         : "Submit quiz"
       : "Submit training";
 
   const primaryDisabled =
-    (step === 0 && !contentComplete) ||
-    (step === 1 && !canAdvanceFromQuiz) ||
-    (step === 2 && !signatureDataUrl);
+    (step === 0 && !selectedLanguage) ||
+    (step === 1 && !contentComplete) ||
+    (step === 2 && !canAdvanceFromQuiz) ||
+    (step === 3 && !signatureDataUrl);
 
   return (
     <Modal
       open={open}
       onClose={onClose}
       title={modalTitle}
-      description="Complete all three steps to finish this training."
+      description="Complete all four steps to finish this training."
     >
       <div className="pb-4">
         <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-primary">
           <span className={step === 0 ? "text-primary" : "text-slate-400"}>
-            1 · Content
+            1 · Language
           </span>
           <span className="text-slate-400">/</span>
           <span className={step === 1 ? "text-primary" : "text-slate-400"}>
-            2 · Quiz
+            2 · Content
           </span>
           <span className="text-slate-400">/</span>
           <span className={step === 2 ? "text-primary" : "text-slate-400"}>
-            3 · Signature
+            3 · Quiz
+          </span>
+          <span className="text-slate-400">/</span>
+          <span className={step === 3 ? "text-primary" : "text-slate-400"}>
+            4 · Signature
           </span>
         </div>
         <div className="mt-4">

@@ -104,7 +104,15 @@ export default function TrainingMatrixPage() {
   const { t } = useTranslation();
   const [viewingHistory, setViewingHistory] = useState<{employeeId: string, courseId: string} | null>(null);
   const [showFormerEmployees, setShowFormerEmployees] = useState(false);
-  const { completedTrainings } = useTrainingStore();
+  
+  // Fetch approved training records from API
+  const { data: apiTrainingRecords = [] } = useQuery({
+    queryKey: ['trainingRecords'],
+    queryFn: async () => {
+      const response = await api.get('/training-records');
+      return response.data;
+    }
+  });
   const { data: users = [], isLoading: isUsersLoading } = useQuery({
     queryKey: ['users'],
     queryFn: async () => {
@@ -141,28 +149,32 @@ export default function TrainingMatrixPage() {
     })).filter((course) => course.isActive)
   ), [coursesData]);
 
-  const dynamicRecords: CompletionRecord[] = completedTrainings
-    .filter((record) => record.status === 'approved')
-    .map((record) => ({
+  // Convert API records to CompletionRecord format
+  const dynamicRecords: CompletionRecord[] = apiTrainingRecords.map((record: any) => {
+    // Find the employee to get their employee_id
+    const employee = employees.find(e => e.id === record.user_id);
+    
+    return {
       id: record.id,
-      employeeId: record.employeeId,
-      courseId: record.courseId,
+      employeeId: employee?.employeeId || record.employee_id,
+      courseId: record.course_id,
       version: 1,
-      completionDate: new Date(record.completionDate),
-      expirationDate: new Date(new Date(record.completionDate).getTime() + 365 * 24 * 60 * 60 * 1000),
-      quizScore: record.quizScore,
-      passPercentage: record.passPercentage,
-      videoWatchDuration: record.durationMinutes,
+      completionDate: new Date(record.completion_date),
+      expirationDate: new Date(new Date(record.completion_date).getTime() + 365 * 24 * 60 * 60 * 1000),
+      quizScore: record.quiz_score,
+      passPercentage: record.pass_percentage,
+      videoWatchDuration: record.duration_minutes || 30,
       quizCompletionTime: 5,
       status: 'active',
-      employeeSignature: record.employeeSignature,
-      employeeSignatureDate: new Date(record.completionDate),
-      supervisorName: record.supervisorName || 'Supervisor',
-      supervisorSignature: record.supervisorSignature || '',
-      supervisorSignatureDate: record.supervisorSignatureDate
-        ? new Date(record.supervisorSignatureDate)
+      employeeSignature: record.employee_signature_data,
+      employeeSignatureDate: new Date(record.employee_signature_date),
+      supervisorName: record.supervisor_name || 'Supervisor',
+      supervisorSignature: record.supervisor_signature_data || '',
+      supervisorSignatureDate: record.supervisor_signature_date
+        ? new Date(record.supervisor_signature_date)
         : undefined
-    }));
+    };
+  });
 
   const completionRecords = [...seedCompletionRecords, ...dynamicRecords];
 

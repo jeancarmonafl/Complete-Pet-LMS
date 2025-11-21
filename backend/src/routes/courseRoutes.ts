@@ -9,7 +9,8 @@ import {
   listCoursesHandler,
   updateCourseHandler,
   updateCourseStatusHandler,
-  uploadCourseContentHandler
+  uploadCourseContentHandler,
+  getQuizHandler
 } from '../controllers/courseController.js';
 import { authenticate } from '../middleware/auth.js';
 
@@ -37,8 +38,15 @@ const upload = multer({
 
 router.use(authenticate());
 router.get('/', listCoursesHandler);
+router.get('/:courseId/quiz', getQuizHandler);
 router.post('/', createCourseHandler);
+// Support both single file upload (legacy) and multi-file upload for languages
 router.post('/upload', upload.single('file'), uploadCourseContentHandler);
+router.post('/upload-multi', upload.fields([
+  { name: 'fileEn', maxCount: 1 },
+  { name: 'fileEs', maxCount: 1 },
+  { name: 'fileNe', maxCount: 1 }
+]), uploadCourseContentHandler);
 router.put('/:id', updateCourseHandler);
 router.patch('/:id/status', updateCourseStatusHandler);
 router.delete('/:id', deleteCourseHandler);

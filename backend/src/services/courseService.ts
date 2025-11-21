@@ -9,7 +9,10 @@ interface CoursePayload {
   description?: string;
   category?: string;
   contentType: 'video' | 'pdf' | 'powerpoint' | 'scorm' | 'other';
-  contentUrl?: string;
+  contentUrl?: string; // Legacy field for backward compatibility
+  contentUrlEn?: string;
+  contentUrlEs?: string;
+  contentUrlNe?: string;
   durationMinutes?: number;
   passPercentage?: number;
   isMandatory?: boolean;
@@ -23,7 +26,11 @@ interface CoursePayload {
 
 export async function createCourse(payload: CoursePayload) {
   console.log('Creating course with payload:', payload);
-  console.log('ContentUrl in payload:', payload.contentUrl);
+  console.log('Multi-language URLs:', {
+    en: payload.contentUrlEn,
+    es: payload.contentUrlEs,
+    ne: payload.contentUrlNe
+  });
   
   const result = await pool.query(
     `INSERT INTO courses (
@@ -34,6 +41,9 @@ export async function createCourse(payload: CoursePayload) {
       category,
       content_type,
       content_url,
+      content_url_en,
+      content_url_es,
+      content_url_ne,
       duration_minutes,
       pass_percentage,
       is_mandatory,
@@ -43,7 +53,7 @@ export async function createCourse(payload: CoursePayload) {
       assign_to_entire_company,
       exception_positions,
       is_active
-    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
+    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
     RETURNING *`,
     [
       payload.organizationId,
@@ -52,7 +62,10 @@ export async function createCourse(payload: CoursePayload) {
       payload.description ?? null,
       payload.category ?? null,
       payload.contentType,
-      payload.contentUrl ?? null,
+      payload.contentUrl ?? payload.contentUrlEn ?? null,
+      payload.contentUrlEn ?? null,
+      payload.contentUrlEs ?? null,
+      payload.contentUrlNe ?? null,
       payload.durationMinutes ?? null,
       payload.passPercentage ?? 80,
       payload.isMandatory ?? false,
@@ -65,8 +78,7 @@ export async function createCourse(payload: CoursePayload) {
     ]
   );
 
-  console.log('Created course:', result.rows[0]);
-  console.log('ContentUrl in created course:', result.rows[0]?.content_url);
+  console.log('Created course with multi-language support');
   
   return result.rows[0];
 }
@@ -91,6 +103,9 @@ export async function updateCourse(courseId: string, locationId: string, updates
     category: 'category',
     contentType: 'content_type',
     contentUrl: 'content_url',
+    contentUrlEn: 'content_url_en',
+    contentUrlEs: 'content_url_es',
+    contentUrlNe: 'content_url_ne',
     durationMinutes: 'duration_minutes',
     passPercentage: 'pass_percentage',
     isMandatory: 'is_mandatory',
@@ -322,4 +337,19 @@ export async function updateCourseStatus(courseId: string, locationId: string, i
   );
 
   return result.rows[0];
+}
+
+export async function getQuizByCourseId(courseId: string) {
+  const result = await pool.query(
+    `
+      SELECT id, course_id, questions, time_limit_minutes, is_active
+      FROM quizzes
+      WHERE course_id = $1 AND is_active = TRUE
+      ORDER BY created_at DESC
+      LIMIT 1
+    `,
+    [courseId]
+  );
+
+  return result.rows[0] || null;
 }

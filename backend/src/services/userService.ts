@@ -351,6 +351,9 @@ export async function getUserActivity(userId: string, locationId?: string) {
           c.title AS course_title,
           c.content_type,
           c.content_url,
+          c.content_url_en,
+          c.content_url_es,
+          c.content_url_ne,
           c.duration_minutes,
           c.pass_percentage,
           e.status,
@@ -360,10 +363,12 @@ export async function getUserActivity(userId: string, locationId?: string) {
           e.completed_date,
           tr.quiz_score,
           tr.approval_status,
-          tr.supervisor_signature_date
+          tr.supervisor_signature_date,
+          q.questions AS quiz_questions
         FROM enrollments e
         JOIN courses c ON e.course_id = c.id
         LEFT JOIN training_records tr ON tr.enrollment_id = e.id
+        LEFT JOIN quizzes q ON q.course_id = c.id AND q.is_active = TRUE
         WHERE e.user_id = $1
         ORDER BY e.created_at DESC
       `,
@@ -377,6 +382,9 @@ export async function getUserActivity(userId: string, locationId?: string) {
           title,
           content_type,
           content_url,
+          content_url_en,
+          content_url_es,
+          content_url_ne,
           duration_minutes,
           pass_percentage,
           assigned_departments,
@@ -395,6 +403,23 @@ export async function getUserActivity(userId: string, locationId?: string) {
     const existingActivity = activityResult.rows as ActivityRow[];
     const existingActivityByCourse = new Map(existingActivity.map((entry) => [entry.course_id, entry]));
 
+    // Fetch quiz questions for missing assignments
+    const missingCourseIds = assignableCoursesResult.rows
+      .filter((course) => shouldAssignCourseToUser(course, { department: user.department, job_title: user.job_title }))
+      .filter((course) => !existingActivityByCourse.has(course.id))
+      .map((course) => course.id);
+
+    let quizQuestionsMap = new Map<string, any>();
+    if (missingCourseIds.length > 0) {
+      const quizzesResult = await client.query(
+        `SELECT course_id, questions FROM quizzes WHERE course_id = ANY($1) AND is_active = TRUE`,
+        [missingCourseIds]
+      );
+      quizzesResult.rows.forEach((row) => {
+        quizQuestionsMap.set(row.course_id, row.questions);
+      });
+    }
+
     const missingAssignments = assignableCoursesResult.rows
       .filter((course) => shouldAssignCourseToUser(course, { department: user.department, job_title: user.job_title }))
       .filter((course) => !existingActivityByCourse.has(course.id))
@@ -404,6 +429,9 @@ export async function getUserActivity(userId: string, locationId?: string) {
         course_title: course.title,
         content_type: course.content_type,
         content_url: course.content_url,
+        content_url_en: (course as any).content_url_en,
+        content_url_es: (course as any).content_url_es,
+        content_url_ne: (course as any).content_url_ne,
         duration_minutes: course.duration_minutes,
         pass_percentage: course.pass_percentage,
         status: 'not_started',
@@ -413,7 +441,8 @@ export async function getUserActivity(userId: string, locationId?: string) {
         completed_date: null,
         quiz_score: null,
         approval_status: null,
-        supervisor_signature_date: null
+        supervisor_signature_date: null,
+        quiz_questions: quizQuestionsMap.get(course.id) || null
       }));
 
     const combinedActivity = [...existingActivity, ...missingAssignments];
