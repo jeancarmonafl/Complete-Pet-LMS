@@ -11,6 +11,9 @@ interface CourseAssignmentRuleRow {
   title: string;
   content_type: string;
   content_url: string | null;
+  content_url_en: string | null;
+  content_url_es: string | null;
+  content_url_ne: string | null;
   duration_minutes: number | null;
   pass_percentage: number | null;
   assigned_departments: string[] | null;
@@ -25,6 +28,9 @@ interface ActivityRow {
   course_title: string;
   content_type: string;
   content_url: string | null;
+  content_url_en: string | null;
+  content_url_es: string | null;
+  content_url_ne: string | null;
   duration_minutes: number | null;
   pass_percentage: number | null;
   status: string | null;
@@ -35,6 +41,7 @@ interface ActivityRow {
   quiz_score: number | null;
   approval_status: string | null;
   supervisor_signature_date: string | null;
+  quiz_questions: any | null;
 }
 
 interface CreateUserPayload {
@@ -429,9 +436,9 @@ export async function getUserActivity(userId: string, locationId?: string) {
         course_title: course.title,
         content_type: course.content_type,
         content_url: course.content_url,
-        content_url_en: (course as any).content_url_en,
-        content_url_es: (course as any).content_url_es,
-        content_url_ne: (course as any).content_url_ne,
+        content_url_en: course.content_url_en,
+        content_url_es: course.content_url_es,
+        content_url_ne: course.content_url_ne,
         duration_minutes: course.duration_minutes,
         pass_percentage: course.pass_percentage,
         status: 'not_started',
